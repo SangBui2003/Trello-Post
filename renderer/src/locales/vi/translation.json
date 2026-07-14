@@ -1,0 +1,478 @@
+{
+  "sidebar": {
+    "title": "PostPilot",
+    "subtitle": "Precision Automation",
+    "post_queue": "Hàng đợi Bài đăng",
+    "group_sync": "Đồng bộ Nhóm",
+    "profile_manager": "Quản lý Profile & Cookie",
+    "group_manager": "Quản lý Nhóm",
+    "event_logs": "Nhật ký Sự kiện",
+    "settings": "Cài đặt",
+    "version": "Phiên bản"
+  },
+  "settings": {
+    "title": "Cài đặt chung",
+    "subtitle": "Cấu hình ngôn ngữ, giao diện & cá nhân hoá hệ thống",
+    "language": {
+      "label": "Ngôn ngữ hệ thống (Language)",
+      "vi": "Tiếng Việt",
+      "en": "English"
+    },
+    "theme": {
+      "label": "Giao diện (Theme)",
+      "light": "Sáng (Light Mode)",
+      "dark": "Tối (Dark Mode)"
+    }
+  },
+  "update": {
+    "available": "Bản cập nhật mới",
+    "version": "Phiên bản",
+    "is_available": "đã sẵn sàng.",
+    "download_update": "Tải bản cập nhật",
+    "downloading": "Đang tải...",
+    "ready_to_install": "Đã tải xong, sẵn sàng cài đặt!",
+    "restart_update": "Khởi động lại & Cập nhật",
+    "failed": "Cập nhật thất bại",
+    "check_failed": "Chưa thể kiểm tra cập nhật mới",
+    "download_failed": "Tải bản cập nhật lỗi",
+    "retry": "Thử lại"
+  },
+  "groups": {
+    "alerts": {
+      "missing_name": "Vui lòng nhập tên nhóm!",
+      "missing_link": "Vui lòng nhập link nhóm!",
+      "error_saving": "Lỗi lưu nhóm: ",
+      "delete_confirm": "Bạn có chắc chắn muốn xoá nhóm \"{{name}}\"?",
+      "delete_error": "Lỗi khi xoá: ",
+      "delete_multiple_confirm": "Bạn có chắc chắn muốn xoá {{count}} nhóm đã chọn?",
+      "delete_multiple_error": "Lỗi khi xoá nhiều nhóm: ",
+      "import_no_data": "File Excel không có dữ liệu (cần ít nhất header và 1 dòng dữ liệu).",
+      "import_missing_columns": "Không tìm thấy cột \"Group Name\" và \"Group Link\" trong file Excel.\nVui lòng đảm bảo header chứa các từ khoá như: name và link/url.",
+      "import_no_valid_data": "Không tìm thấy dữ liệu nhóm hợp lệ trong file Excel.",
+      "import_error": "Lỗi khi nhập file Excel: ",
+      "import_success": "Nhập thành công:",
+      "new_groups": "nhóm mới",
+      "skipped": "nhóm đã tồn tại (bỏ qua)"
+    },
+    "table": {
+      "group_name": "Tên Nhóm",
+      "group_link": "Link Nhóm",
+      "actions": "Tác vụ"
+    },
+    "title": "Quản lý Nhóm",
+    "subtitle": "Quản lý hàng loạt: Nhập, xác minh & đồng bộ hóa danh sách cộng đồng mục tiêu",
+    "buttons": {
+      "add_group": "Thêm Nhóm",
+      "import_excel": "Nhập Excel",
+      "delete_selected": "Xoá đã chọn"
+    },
+    "labels": {
+      "total": "Tổng:",
+      "groups_count_suffix": "nhóm"
+    },
+    "empty_state": "Chưa có nhóm nào được lưu.",
+    "modal": {
+      "add_title": "Thêm nhóm mới",
+      "edit_title": "Cập nhật Nhóm",
+      "group_name": "Tên Nhóm",
+      "name_placeholder": "VD: Mua bán Bất động sản",
+      "group_link": "Link/URL Nhóm",
+      "link_placeholder": "VD: https://.../groups/123",
+      "cancel": "Huỷ",
+      "saving": "Đang lưu...",
+      "save": "Lưu Nhóm"
+    }
+  },
+  "profiles": {
+    "alerts": {
+      "missing_name": "Vui lòng nhập tên Profile!",
+      "missing_cookie": "Vui lòng lấy Cookies trước khi lưu!",
+      "error_saving": "Lỗi khi lưu profile: ",
+      "delete_confirm": "Bạn có chắc chắn muốn xoá profile \"{{name}}\"?",
+      "delete_error": "Lỗi khi xoá: ",
+      "page_scan_error": "Lỗi quét trang: ",
+      "page_name_empty": "Tên trang không được để trống!",
+      "page_update_error": "Lỗi khi cập nhật tên trang: ",
+      "token_update_error": "Lỗi cập nhật token: ",
+      "invalid_j2team_format": "Dữ liệu không đúng định dạng J2Team. Vui lòng dán đúng JSON cookies từ J2Team Extension."
+    },
+    "table": {
+      "profile_name": "Tên Profile",
+      "date_added": "Ngày thêm",
+      "pages": "Trang",
+      "actions": "Tác vụ"
+    },
+    "title": "Quản lý Profile & Cookie",
+    "subtitle": "Hệ thống danh tính: Lưu trữ Identity Cục bộ & Đồng bộ hóa Dữ liệu an toàn",
+    "buttons": {
+      "add_profile": "Thêm Profile mới"
+    },
+    "empty_state": "Chưa có Profile nào được lưu.",
+    "tooltips": {
+      "rescan": "Quét lại danh sách trang",
+      "delete": "Xoá Profile",
+      "edit_name": "Sửa tên hiển thị",
+      "update_token": "Cập nhật Token / Cookie"
+    },
+    "labels": {
+      "fanpage_list": "Danh sách Fanpage (Có thể đổi tên hiển thị)"
+    },
+    "modal": {
+      "add_title": "Thêm Profile Mới",
+      "profile_name": "Tên Profile",
+      "name_placeholder": "VD: Nick Clone 01...",
+      "extract_cookie": "Lấy Cookie",
+      "extract_instruction": "Vui lòng bấm nút bên dưới để mở trình duyệt và tự đăng nhập Facebook. Hệ thống sẽ tự động lưu Cookie khi bạn đăng nhập thành công.",
+      "waiting_login": "Đang chờ đăng nhập...",
+      "open_browser": "Mở trình duyệt & Lấy Cookie",
+      "cookie_success": "Đã lấy Cookie thành công!",
+      "get_different": "Lấy Cookie khác",
+      "cancel": "Huỷ",
+      "saving": "Đang lưu & Quét Trang...",
+      "save": "Lưu Profile",
+      "update_title": "Cập nhật Token / Cookie",
+      "update_instruction": "Chọn cách lấy Token/Cookie mới cho profile này:",
+      "tab_browser": "Mở trình duyệt",
+      "tab_paste": "Dán từ J2Team",
+      "paste_instruction": "Dán JSON cookies được export từ J2Team Extension vào ô bên dưới.",
+      "paste_placeholder": "Dán JSON cookies từ J2Team Extension vào đây...",
+      "updating": "Đang cập nhật & Quét lại Trang...",
+      "update": "Cập nhật Token"
+    }
+  },
+  "logs": {
+    "title": "Nhật ký Sự kiện",
+    "lines": "dòng",
+    "copied": "Đã chép",
+    "copy": "Sao chép",
+    "download": "Tải xuống",
+    "clear_logs": "Xoá nhật ký",
+    "clear_confirm": "Xoá tất cả nhật ký hiện tại?",
+    "no_logs": "Chưa có nhật ký nào.",
+    "ready": "Sẵn sàng nhận nhiệm vụ..."
+  },
+  "post_group": {
+    "title": "Chuẩn bị Đăng Nhóm Facebook",
+    "subtitle": "Không gian làm việc: Tự động tải profile và nội dung để đăng thủ công.",
+    "alerts": {
+      "missing_profile": "Vui lòng chọn Profile Facebook!",
+      "missing_content": "Vui lòng nhập nội dung bài viết!",
+      "error_prefix": "Lỗi:"
+    },
+    "labels": {
+      "group_id": "ID Nhóm (Cấu hình)",
+      "select_profile": "Chọn Profile (Bắt buộc)",
+      "post_as": "Đăng với tư cách (Cá nhân / Fanpage)",
+      "post_content": "Nội dung bài viết",
+      "attached_image": "Ảnh đính kèm"
+    },
+    "placeholders": {
+      "select_profile": "-- Chọn Profile Facebook --",
+      "post_content": "Nhập nội dung để đăng vào nhóm...",
+      "no_image": "Chưa chọn ảnh"
+    },
+    "options": {
+      "personal_account": "Tài khoản cá nhân"
+    },
+    "buttons": {
+      "browse": "Duyệt...",
+      "clear": "Xoá",
+      "initializing": "Đang khởi tạo...",
+      "prepare_draft": "Mở Facebook & Chuẩn bị Draft",
+      "processing": "Đang xử lý...",
+      "complete": "Tôi đã đăng xong (Hoàn thành)",
+      "stop": "Dừng"
+    },
+    "tooltips": {
+      "stop_automation": "Dừng tự động hoá và đóng trình duyệt"
+    }
+  },
+  "post_queue": {
+    "title": "Quản lý Hàng đợi Đăng bài",
+    "subtitle": "Trích xuất URL thông minh & Điều phối quy trình hiệu suất cao",
+    "buttons": {
+      "stop_all": "Dừng tất cả",
+      "create_queue": "Tạo hàng đợi",
+      "browser": "Trình duyệt",
+      "continue": "Tiếp tục",
+      "start_queue": "Bắt đầu",
+      "stop": "Dừng"
+    },
+    "alerts": {
+      "error_prefix": "Lỗi:"
+    },
+    "empty_state": "Không tìm thấy hàng đợi nào. Hãy tạo hàng đợi đầu tiên của bạn để bắt đầu đăng bài tự động.",
+    "loading": "Đang tải danh sách hàng đợi...",
+    "badges": {
+      "pending_approval": "Chờ phê duyệt",
+      "posting": "Đang đăng",
+      "waiting": "Đang chờ",
+      "paused": "Đã tạm dừng"
+    },
+    "labels": {
+      "page": "TRANG:",
+      "personal_account": "Tài khoản cá nhân"
+    },
+    "tooltips": {
+      "manual_approval": "Chế độ phê duyệt thủ công ĐANG BẬT",
+      "reset_process": "Đặt lại quy trình",
+      "event_history": "Lịch sử sự kiện",
+      "edit": "Chỉnh sửa",
+      "delete": "Xóa",
+      "go_to_browser": "Đến trình duyệt",
+      "stop_queue": "Dừng hàng đợi"
+    },
+    "progress": {
+      "title": "Tiến độ Đăng bài",
+      "post_count": "Bài đăng {{current}}/{{total}}",
+      "groups": "nhóm",
+      "next_group": "Nhóm tiếp theo:",
+      "completed": "Đã hoàn thành"
+    },
+    "logs": {
+      "updated_at": "Cập nhật {{time}}",
+      "title": "Nhật ký: {{name}}",
+      "subtitle": "Lưu trữ 100 hoạt động gần nhất.",
+      "empty_state": "Chưa có nhật ký hoạt động nào.",
+      "open_post_link": "Mở liên kết bài đăng"
+    },
+    "modal": {
+      "add_title": "Tạo Hàng đợi Mới",
+      "edit_title": "Chỉnh sửa Hàng đợi",
+      "subtitle": "Cấu hình bài đăng và danh sách nhóm mục tiêu của bạn.",
+      "labels": {
+        "queue_name": "Tên hàng đợi",
+        "profile": "Hồ sơ",
+        "posting_identity": "Tư cách đăng bài (Cá nhân/Trang)",
+        "delay_minutes": "Độ trễ giữa các bài đăng (Phút)",
+        "manual_approval": "Chế độ phê duyệt thủ công",
+        "post_list": "Danh sách bài đăng ({{count}})"
+      },
+      "placeholders": {
+        "queue_name": "VD: Hàng đợi Bất động sản",
+        "delay_minutes": "Mặc định: 5 phút",
+        "post_content": "Nhập nội dung bài đăng..."
+      },
+      "options": {
+        "select_profile": "-- Chọn hồ sơ --",
+        "personal_account": "Tài khoản cá nhân"
+      },
+      "descriptions": {
+        "manual_approval": "Hàng đợi sẽ tạm dừng ở mỗi bài đăng để cho phép xem xét thủ công."
+      },
+      "buttons": {
+        "add_post": "+ Thêm bài đăng",
+        "browse_image": "Chọn ảnh",
+        "cancel": "Hủy",
+        "saving": "Đang lưu...",
+        "update_config": "Cập nhật Cấu hình",
+        "save_config": "Lưu Cấu hình"
+      },
+      "master_post": "BÀI ĐĂNG CHÍNH #{{index}}",
+      "alerts": {
+        "confirm_delete": "Bạn có chắc chắn muốn xóa hàng đợi \"{{name}}\"?",
+        "confirm_reset": "Bạn có muốn đặt lại tiến trình hàng đợi \"{{name}}\"? Thao tác này sẽ xóa tất cả log và bắt đầu lại từ nhóm đầu tiên.",
+        "missing_name": "Vui lòng nhập tên hàng đợi.",
+        "missing_profile": "Vui lòng chọn một hồ sơ.",
+        "min_posts": "Vui lòng thêm ít nhất 1 bài đăng.",
+        "valid_post": "Ít nhất 1 bài đăng phải có nội dung.",
+        "min_groups": "Vui lòng chọn ít nhất 1 nhóm.",
+        "error_saving": "Lỗi khi lưu hàng đợi: ",
+        "error_deleting": "Lỗi khi xóa hàng đợi: ",
+        "error_stopping": "Lỗi khi dừng hàng đợi: ",
+        "error_approving": "Lỗi khi xác nhận phê duyệt: ",
+        "error_focusing": "Lỗi khi mở trình duyệt: ",
+        "error_resetting": "Lỗi cài đặt lại: ",
+        "error_stopping_all": "Lỗi khi dừng tất cả: "
+      }
+    }
+  },
+  "sync_queue": {
+    "title": "Quản lý Đồng bộ Nhóm",
+    "subtitle": "Tự động hóa sao chép & phân phối nội dung giữa các nhóm",
+    "buttons": {
+      "stop_all": "Dừng tất cả",
+      "create_task": "Tạo nhiệm vụ đồng bộ",
+      "start_sync": "Bắt đầu đồng bộ",
+      "stop_sync": "Dừng đồng bộ",
+      "stop": "Dừng"
+    },
+    "loading": "Đang tải danh sách đồng bộ...",
+    "empty_state": "Chưa có tác vụ đồng bộ nào. Hãy tạo tác vụ đầu tiên để tự động đăng lại nội dung giữa các nhóm.",
+    "badges": {
+      "syncing": "Đang đồng bộ"
+    },
+    "labels": {
+      "posting_identity": "TƯ CÁCH ĐĂNG BÀI:"
+    },
+    "progress": {
+      "source_progress": "Tiến độ Nguồn",
+      "source_count": "Nguồn {{current}}/{{total}}",
+      "targets": "mục tiêu",
+      "current_target": "Mục tiêu hiện tại:"
+    },
+    "tooltips": {
+      "stop_sync": "Dừng đồng bộ"
+    },
+    "logs": {
+      "open_related_link": "Mở liên kết liên quan"
+    },
+    "modal": {
+      "add_title": "Tạo Nhiệm vụ Đồng bộ Mới",
+      "edit_title": "Chỉnh sửa Nhiệm vụ Đồng bộ",
+      "subtitle": "Cấu hình nhóm nguồn và đích đến.",
+      "labels": {
+        "task_name": "Tên nhiệm vụ",
+        "delay_groups": "Độ trễ giữa các nhóm (phút)",
+        "source_urls": "URL Nguồn ({{count}})",
+        "target_destinations": "Đích đến ({{count}})"
+      },
+      "placeholders": {
+        "task_name": "VD: Đồng bộ BĐS hàng tuần",
+        "delay_groups": "VD: 5",
+        "source_url": "https://facebook.com/groups/source-group"
+      },
+      "descriptions": {
+        "delay_groups": "Để tránh bị checkpoint từ Facebook. Khuyến nghị: 5-10 phút.",
+        "manual_approval": "Nhiệm vụ sẽ tạm dừng ở mỗi bài đăng để cho phép chỉnh sửa thủ công trước khi sao chép."
+      },
+      "buttons": {
+        "add_source": "+ Thêm Nguồn",
+        "select_all": "Chọn tất cả",
+        "deselect_all": "Bỏ chọn tất cả"
+      },
+      "empty_sources": "Chưa thêm URL nguồn nào. Vui lòng thêm ít nhất một URL nhóm để thu thập bài đăng.",
+      "empty_targets": "Chưa có nhóm nào. Vui lòng thêm nhóm nguồn vào quản lý.",
+      "alerts": {
+        "confirm_delete": "Bạn có chắc chắn muốn xóa chiến dịch \"{{name}}\"?",
+        "confirm_reset": "Bạn có muốn đặt lại quy trình \"{{name}}\"? Thao tác này sẽ xóa tất cả log và bắt đầu lại từ nhóm đầu tiên.",
+        "missing_name": "Vui lòng nhập tên chiến dịch.",
+        "missing_profile": "Vui lòng chọn một hồ sơ.",
+        "min_groups": "Vui lòng chọn ít nhất 1 nhóm.",
+        "invalid_delay": "Thời gian chờ không hợp lệ.",
+        "error_stopping": "Lỗi khi dừng quy trình: ",
+        "missing_profile_start": "Hồ sơ Facebook của hàng đợi này không còn tồn tại. Vui lòng chỉnh sửa hàng đợi và chọn lại hồ sơ."
+      }
+    }
+  },
+  "backend": {
+    "status": {
+      "initializing_browser": "Đang khởi tạo trình duyệt...",
+      "setting_cookies": "Đang thiết lập cookie...",
+      "posting_personal": "Đang đăng bằng tài khoản cá nhân.",
+      "finished_posting": "Đã hoàn thành đăng trên tất cả các nhóm!",
+      "success_posted": "Đã đăng thành công lên tất cả các nhóm trong hàng đợi.",
+      "queue_stopped": "Hàng đợi đã dừng.",
+      "loop_error": "Lỗi quy trình: {{message}}",
+      "step_success": "Thành công. Chờ {{minutes}} phút...",
+      "preparing": "Đang chuẩn bị...",
+      "waiting_manual": "Đang chờ phê duyệt thủ công. Vui lòng xem trên trình duyệt và nhấn \"Tiếp tục\" trên ứng dụng.",
+      "approval_required": "Hàng đợi \"{{name}}\" cần được phê duyệt để đăng.",
+      "approved_retrieving": "Đã phê duyệt. Đang lấy URL bài viết...",
+      "retrieving": "Đang lấy URL bài viết...",
+      "post_sent_pending": "Đăng thành công (chờ quản trị viên phê duyệt): {{group}} ({{step}})",
+      "posted_success_url": "Đăng thành công: {{group}} ({{step}}). URL: {{url}}",
+      "posted_success_no_url": "Đăng thành công: {{group}} ({{step}}) (Không lấy được link)",
+      "post_published": "Bài viết đã được đăng.",
+      "error_at_group": "Lỗi ở nhóm {{group}}: {{message}}",
+      "finished_syncing": "Đã hoàn thành đồng bộ nội dung đến tất cả các nhóm đích!",
+      "success_sync": "Đồng bộ thành công đến tất cả các mục tiêu.",
+      "scanning_source": "Đang quét nhóm nguồn để tìm các bài đăng mới...",
+      "found_new": "Tìm thấy {{count}} bài đăng mới. Đang lọc theo thời gian/trùng lặp...",
+      "no_valid_posts": "Không tìm thấy bài viết hợp lệ nào để đồng bộ.",
+      "start_syncing": "Bắt đầu đồng bộ bài: {{id}}...",
+      "syncing_to": "Đang đồng bộ tới {{group}}...",
+      "success_synced_url": "Đồng bộ thành công bài {{id}} tới {{group}}. URL: {{url}}",
+      "success_synced_no_url": "Đồng bộ thành công bài {{id}} tới {{group}} (Không lấy được link)",
+      "failed_sync": "Lỗi đồng bộ bài {{id}} tại nhóm {{group}}: {{message}}",
+      "switching_fanpage": "Đang chuyển sang URL Fanpage: {{url}}",
+      "switch_success": "Đã chuyển ngữ cảnh Fanpage thành công.",
+      "accessing_pages": "Đang truy cập Trang Facebook...",
+      "failed_pages": "Lỗi khi tải ngữ cảnh Trang Facebook",
+      "processing_page": "Đang xử lý URL trang: {{url}}",
+      "discovered_pages": "Tìm thấy thành công {{count}} Trang.",
+      "browser_launched": "Đã mở trình duyệt thành công. Vui lòng làm theo hướng dẫn.",
+      "unknown_error": "Lỗi không xác định",
+      "system_loop_error": "Lỗi hệ thống: {{message}}",
+      "switching_identity": "Đang chuyển đổi danh tính sang Fanpage...",
+      "accessing_page_url": "Đang truy cập Trang: {{url}}...",
+      "searching_switch_btn": "Đang tìm nút chuyển...",
+      "switch_btn_found": "Đã tìm thấy nút chuyển, đang nhấn...",
+      "waiting_identity_change": "Đã nhấn nút chuyển, đang chờ thay đổi danh tính (tối đa 10 giây)...",
+      "identity_changed_immediate": "Phát hiện thay đổi navigation/cookie — Đã chuyển đổi danh tính ngay lập tức.",
+      "modal_detected": "Phát hiện hộp thoại xác nhận, đang nhấn xác nhận...",
+      "waiting_fb_switch": "Đã xác nhận. Đang chờ Facebook chuyển đổi danh tính...",
+      "identity_switch_success": "Chuyển đổi danh tính thành công.",
+      "no_modal_detected": "Không phát hiện modal hoặc navigation. Đang kiểm tra danh tính hiện tại...",
+      "checking_actual_identity": "Đang kiểm tra danh tính thực tế...",
+      "already_fanpage": "Tài khoản hiện đã sử dụng danh tính Fanpage.",
+      "opening_photo_action": "Đang mở trình chọn ảnh/video...",
+      "uploading_file_chooser": "Đang tải ảnh lên qua File Chooser...",
+      "uploading_fallback": "Đang tải ảnh lên trình soạn thảo (fallback)...",
+      "opening_group_page": "Đang mở trang nhóm Facebook...",
+      "popup_detected": "Phát hiện popup xác nhận tài khoản, đang tự động nhấn Tiếp tục/Đóng...",
+      "setting_cookies_profile": "Đang thiết lập Facebook Cookies cho profile...",
+      "waiting_composer_area": "Đang chờ khu vực soạn thảo bài viết xuất hiện...",
+      "entering_post_content": "Đang nhập nội dung bài viết...",
+      "content_filled_review": "Nội dung và ảnh đã được điền xong. Vui lòng kiểm tra và nhấn Đăng thủ công trên trình duyệt.",
+      "error_screenshot_saved": "Đã lưu ảnh chụp màn hình lỗi tại: {{path}}",
+      "initializing_sync_browser": "Đang khởi tạo trình duyệt Đồng bộ...",
+      "using_personal_account": "Đang sử dụng tài khoản cá nhân.",
+      "all_groups_joined_success": "Đã gửi yêu cầu tham gia thành công trên tất cả các nhóm!",
+      "completed_all_groups": "Đã hoàn thành tất cả các nhóm trong hàng đợi.",
+      "pausing_minutes_before": "Tạm dừng khoảng {{minutes}} phút trước khi tiếp tục...",
+      "starting_processing_task": "Bắt đầu xử lý...",
+      "processed_group_result": "Đã xử lý xong nhóm {{name}}: {{status}}",
+      "error_at_group_log": "Lỗi tại nhóm {{name}}: {{message}}",
+      "accessing_group_url": "Đang truy cập: {{url}}",
+      "join_request_sent_url": "Yêu cầu tham gia đã gửi: {{url}}",
+      "group_pending_approval_url": "Nhóm đang chờ phê duyệt: {{url}}",
+      "already_member_url": "Đã là thành viên: {{url}}",
+      "join_btn_not_found_url": "Không tìm thấy nút tham gia (nhóm kín hoặc lỗi): {{url}}",
+      "error_accessing_group_url": "Lỗi khi truy cập nhóm {{url}}: {{message}}",
+      "searching_composer_btn": "Đang tìm nút tạo bài viết...",
+      "shortcut_p_attempt": "Không tìm thấy nút tạo bài viết. Đang thử mở trình soạn thảo bằng phím tắt \"P\"...",
+      "status_joined": "Đã tham gia",
+      "status_pending": "Đang chờ duyệt",
+      "status_join_clicked": "Đã nhấn tham gia",
+      "status_unknown": "Không rõ",
+      "status_failed": "Thất bại"
+    },
+    "errors": {
+      "no_posts": "Không có bài đăng nào.",
+      "no_groups": "Không có nhóm mục tiêu.",
+      "facebook_login": "Facebook yêu cầu đăng nhập. Cookies không hợp lệ hoặc đã hết hạn.",
+      "post_button": "Không tìm thấy nút Đăng.",
+      "facebook_login_2": "Facebook đang yêu cầu đăng nhập. Cookies có thể đã hết hạn hoặc không đúng.",
+      "file_input": "Không tìm thấy mục tải ảnh lên.",
+      "composer_failed": "Trình soạn thảo đã mở nhưng lỗi khi nhập nội dung bài viết.",
+      "composer_not_found": "Không tìm thấy khu vực nhập nội dung.",
+      "direct_selector": "Không tìm thấy selector trực tiếp.",
+      "cannot_switch": "Không thể tự động chuyển sang Fanpage. Vui lòng chuyển thủ công hoặc kiểm tra Cookies.",
+      "switch_failed": "Lỗi quy trình chuyển trang.",
+      "queue_name_empty": "Tên hàng đợi không được để trống.",
+      "queue_name_empty_2": "Tên tác vụ không được để trống.",
+      "no_profile": "Chưa chọn hồ sơ Facebook.",
+      "min_groups": "Vui lòng chọn ít nhất 1 nhóm.",
+      "page_in_use": "Trang này hiện đang được sử dụng ở hàng đợi \"{{name}}\". Vui lòng dừng nó trước.",
+      "page_in_use_sync": "Trang này hiện đang được sử dụng ở tác vụ đồng bộ \"{{name}}\". Vui lòng dừng nó trước.",
+      "process_running": "Tiến trình này hiện đang chạy.",
+      "queue_not_exist": "Tiến trình không tồn tại.",
+      "profile_no_cookies": "Hồ sơ không tồn tại hoặc không có cookies.",
+      "min_post": "Hàng đợi phải có ít nhất 1 bài viết.",
+      "queue_not_exist_2": "Hàng đợi không tồn tại.",
+      "profile_not_exist": "Hồ sơ đã chọn không còn tồn tại.",
+      "invalid_cookies": "Hồ sơ không có cookies hợp lệ.",
+      "image_not_found": "Không tìm thấy ảnh: {{path}}",
+      "no_valid_groups": "Không tìm thấy nhóm hợp lệ.",
+      "cannot_reset_running": "Không thể reset khi tiến trình đang chạy. Vui lòng dừng nó trước.",
+      "session_open": "Một phiên bản Facebook đang chạy. Vui lòng hoàn thành hoặc đóng cửa sổ trước khi tạo mới.",
+      "missing_cookies": "Thiếu chuỗi Cookies. Vui lòng nhập chuỗi Cookies trên giao diện.",
+      "post_content_empty": "Nội dung bài viết trống.",
+      "selected_image_not_found": "Không tìm thấy file ảnh đã chọn."
+    },
+    "progress": {
+      "step_label": "Nhóm {{groupIndex}}/{{groupTotal}}, Bài {{postIndex}}/{{postTotal}}"
+    }
+  }
+}

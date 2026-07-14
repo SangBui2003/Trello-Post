@@ -1,0 +1,128 @@
+{
+  "name": "trello_postpilot",
+  "productName": "Trello PostPilot",
+  "version": "1.0.6",
+  "description": "Desktop app to prepare a Facebook group post with Puppeteer and wait for manual confirmation.",
+  "main": "main.js",
+  "scripts": {
+    "start": "npm run build:ui && electron .",
+    "dev:ui": "cd renderer && npm run dev",
+    "build:ui": "cd renderer && npm run build",
+    "start:debug": "electron . --enable-logging",
+    "postinstall": "electron-rebuild -f -w better-sqlite3",
+    "build:app": "npm run build:ui && electron-packager . PostPilot --platform=win32 --arch=x64 --out=release --overwrite --icon=icon.ico --ignore=release",
+    "build": "npm run build:app",
+    "dist:nsis": "npm run build:ui && npm run prebuild:electron && electron-builder --win --x64",
+    "dist:publish": "dotenv -- npm run build:ui && dotenv -- npm run prebuild:electron && dotenv -- electron-builder --win --x64 --publish always",
+    "prebuild:electron": "node scripts/build-config.js",
+    "dist": "npm run build:app && node scripts/build-bootstrap-dist.js"
+  },
+  "build": {
+    "releaseInfo": {
+      "releaseName": "PostPilot v1.0.5: Cải thiện quản lý Token & Tối ưu cấu trúc",
+      "releaseNotes": "🔧 **PostPilot v1.0.5 — Bản cập nhật & sửa lỗi**\n\n- **Sửa lỗi token hết hạn**: Giờ đây có thể cập nhật lại Token/Cookie trực tiếp mà không cần xoá và tạo lại profile.\n- **Hỗ trợ dán cookie từ J2Team Extension**: Thêm tuỳ chọn dán JSON cookies từ trình duyệt khi thêm mới hoặc cập nhật profile.\n- **Tự động quét lại Fanpage**: Sau khi cập nhật token, danh sách Fanpage được quét lại tự động để đảm bảo đồng bộ.\n- **Tối ưu cấu trúc mã nguồn**: Tách CookieInput và ProfileFormModal thành component riêng, giảm trùng lặp code và dễ bảo trì hơn."
+    },
+    "appId": "com.postpilot.app",
+    "productName": "PostPilot",
+    "copyright": "Copyright © 2026 AlanNNS",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/puppeteer/.local-chromium/**/*",
+      "node_modules/puppeteer/.cache/**/*",
+      "node_modules/better-sqlite3/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "C:/Users/Admin/.cache/puppeteer/chrome/win64-146.0.7680.76/chrome-win64",
+        "to": "chromium",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "files": [
+      "main.js",
+      "preload.js",
+      "icon.png",
+      "icon.ico",
+      "src/**/*",
+      "renderer/src/locales/**/*",
+      "renderer/dist/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "msi",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "icon.ico"
+    },
+    "forceCodeSigning": false,
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "msi": {
+      "oneClick": false,
+      "perMachine": false
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "alan14112003",
+        "repo": "PostPilot",
+        "private": true,
+        "releaseType": "release"
+      }
+    ]
+  },
+  "bootstrapInstaller": {
+    "artifactName": "PostPilot-Install.exe",
+    "packagedAppDirName": "PostPilot-win32-x64",
+    "appArchiveName": "PostPilot-win32-x64.zip",
+    "installDirName": "PostPilot",
+    "downloadUrl": ""
+  },
+  "keywords": [
+    "electron",
+    "puppeteer",
+    "facebook"
+  ],
+  "author": {
+    "name": "AlanNNS",
+    "email": "alannns1114@gmail.com"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^12.8.0",
+    "electron-log": "^5.4.3",
+    "electron-updater": "^6.8.3",
+    "puppeteer": "^24.11.2",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.0.3",
+    "dotenv-cli": "^11.0.0",
+    "electron": "^37.1.0",
+    "electron-builder": "^26.8.1",
+    "electron-packager": "^17.1.2"
+  }
+}

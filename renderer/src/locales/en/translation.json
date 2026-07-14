@@ -1,0 +1,478 @@
+{
+  "sidebar": {
+    "title": "PostPilot",
+    "subtitle": "Precision Automation",
+    "post_queue": "Post Queue",
+    "group_sync": "Group Sync",
+    "profile_manager": "Profile & Cookie Manager",
+    "group_manager": "Group Manager",
+    "event_logs": "Event Logs",
+    "settings": "Settings",
+    "version": "Version"
+  },
+  "settings": {
+    "title": "System Settings",
+    "subtitle": "Customize system language, theme & personal preferences",
+    "language": {
+      "label": "System Language",
+      "vi": "Tiếng Việt (Vietnamese)",
+      "en": "English"
+    },
+    "theme": {
+      "label": "Theme",
+      "light": "Light Mode",
+      "dark": "Dark Mode"
+    }
+  },
+  "update": {
+    "available": "Update Available",
+    "version": "Version",
+    "is_available": "is available.",
+    "download_update": "Download Update",
+    "downloading": "Downloading...",
+    "ready_to_install": "Update ready to install!",
+    "restart_update": "Restart & Update",
+    "failed": "Update failed",
+    "check_failed": "Failed to check for updates",
+    "download_failed": "Download failed",
+    "retry": "Retry"
+  },
+  "groups": {
+    "alerts": {
+      "missing_name": "Please enter a group name!",
+      "missing_link": "Please enter the group link!",
+      "error_saving": "Error saving group: ",
+      "delete_confirm": "Are you sure you want to delete group \"{{name}}\"?",
+      "delete_error": "Delete error: ",
+      "delete_multiple_confirm": "Are you sure you want to delete the {{count}} selected groups?",
+      "delete_multiple_error": "Error deleting multiple groups: ",
+      "import_no_data": "Excel file has no data (needs at least a header and 1 data row).",
+      "import_missing_columns": "Could not find \"Group Name\" and \"Group Link\" columns in the Excel file.\nPlease ensure the header contains keywords like: name and link/url.",
+      "import_no_valid_data": "No valid group data found in the Excel file.",
+      "import_error": "Error importing Excel file: ",
+      "import_success": "Import Successful:",
+      "new_groups": "new groups",
+      "skipped": "groups already exist (skipped)"
+    },
+    "table": {
+      "group_name": "Group Name",
+      "group_link": "Group Link",
+      "actions": "Actions"
+    },
+    "title": "Group Manager",
+    "subtitle": "Batch Management: Import, Validate & Synchronize Target Communities",
+    "buttons": {
+      "add_group": "Add Group",
+      "import_excel": "Import Excel",
+      "delete_selected": "Delete Selected"
+    },
+    "labels": {
+      "total": "Total:",
+      "groups_count_suffix": "groups"
+    },
+    "empty_state": "No groups saved yet.",
+    "modal": {
+      "add_title": "Add New Group",
+      "edit_title": "Update Group",
+      "group_name": "Group Name",
+      "name_placeholder": "e.g., Real Estate Buy/Sell",
+      "group_link": "Group Link/URL",
+      "link_placeholder": "e.g., https://.../groups/123",
+      "cancel": "Cancel",
+      "saving": "Saving...",
+      "save": "Save Group"
+    }
+  },
+  "profiles": {
+    "alerts": {
+      "missing_name": "Please enter a Profile name!",
+      "missing_cookie": "Please extract Cookies before saving!",
+      "error_saving": "Error saving profile: ",
+      "delete_confirm": "Are you sure you want to delete profile \"{{name}}\"?",
+      "delete_error": "Delete error: ",
+      "page_scan_error": "Page scan error: ",
+      "page_name_empty": "Page name cannot be empty!",
+      "page_update_error": "Error updating page name: ",
+      "token_update_error": "Error updating token: ",
+      "invalid_j2team_format": "Invalid J2Team format. Please paste the correct JSON cookies from J2Team Extension."
+    },
+    "table": {
+      "profile_name": "Profile Name",
+      "date_added": "Date Added",
+      "pages": "Pages",
+      "actions": "Actions"
+    },
+    "title": "Profile & Cookie Management",
+    "subtitle": "Identity Orchestration: Secure Local Identity Storage & Metadata Synchronization",
+    "buttons": {
+      "add_profile": "Add New Profile"
+    },
+    "empty_state": "No Profiles saved yet.",
+    "tooltips": {
+      "rescan": "Rescan pages from Facebook",
+      "delete": "Delete Profile",
+      "edit_name": "Edit display name",
+      "update_token": "Update Token / Cookie"
+    },
+    "labels": {
+      "fanpage_list": "Fanpage List (Editable display names)"
+    },
+    "modal": {
+      "add_title": "Add New Profile",
+      "profile_name": "Profile Name",
+      "name_placeholder": "VD: Nick Clone 01...",
+      "extract_cookie": "Extract Cookie",
+      "extract_instruction": "Please click the button below to open the browser and log in to Facebook manually. The system will automatically capture the Cookie once you log in successfully.",
+      "waiting_login": "Waiting for login...",
+      "open_browser": "Open Browser & Get Cookie",
+      "cookie_success": "Cookie extracted successfully!",
+      "get_different": "Get different Cookie",
+      "cancel": "Cancel",
+      "saving": "Saving & Scanning Pages...",
+      "save": "Save Profile",
+      "update_title": "Update Token / Cookie",
+      "update_instruction": "Choose how to get a new Token/Cookie for this profile:",
+      "tab_browser": "Open Browser",
+      "tab_paste": "Paste from J2Team",
+      "paste_instruction": "Paste the JSON cookies exported from J2Team Extension below.",
+      "paste_placeholder": "Paste J2Team Extension JSON cookies here...",
+      "updating": "Updating & Rescanning Pages...",
+      "update": "Update Token"
+    }
+  },
+  "logs": {
+    "title": "Event Logs",
+    "lines": "lines",
+    "copied": "Copied",
+    "copy": "Copy",
+    "download": "Download",
+    "clear_logs": "Clear logs",
+    "clear_confirm": "Clear all current logs?",
+    "no_logs": "No logs yet.",
+    "ready": "Ready for tasks..."
+  },
+  "post_group": {
+    "title": "Prepare Facebook Group Post",
+    "subtitle": "Integrated Workspace: Automated profile initialization and content projection for manual verification.",
+    "alerts": {
+      "missing_profile": "Please select a Facebook Profile!",
+      "missing_content": "Please enter post content!",
+      "error_prefix": "Error:"
+    },
+    "labels": {
+      "group_id": "Group ID (Config)",
+      "select_profile": "Select Profile (Required)",
+      "post_as": "Post as (Personal or Page)",
+      "post_content": "Post Content",
+      "attached_image": "Attached Image"
+    },
+    "placeholders": {
+      "select_profile": "-- Select Facebook Profile --",
+      "post_content": "Enter content to post in the group...",
+      "no_image": "No image selected"
+    },
+    "options": {
+      "personal_account": "Personal Account"
+    },
+    "buttons": {
+      "browse": "Browse...",
+      "clear": "Clear",
+      "initializing": "Initializing...",
+      "prepare_draft": "Open Facebook & Prepare Draft",
+      "processing": "Processing...",
+      "complete": "I've finished posting (Complete)",
+      "stop": "Stop"
+    },
+    "tooltips": {
+      "stop_automation": "Stop automation and close browser"
+    }
+  },
+  "post_queue": {
+    "title": "Post Queue Management",
+    "subtitle": "Intelligent URL Extraction & High-Performance Workflow Orchestration",
+    "buttons": {
+      "stop_all": "Stop All",
+      "create_queue": "Create Queue",
+      "browser": "Browser",
+      "continue": "Continue",
+      "start_queue": "Start Queue",
+      "stop": "Stop"
+    },
+    "alerts": {
+      "error_prefix": "Error:"
+    },
+    "empty_state": "No queues found. Create your first queue to start automated posting.",
+    "loading": "Loading queue list...",
+    "badges": {
+      "pending_approval": "Pending Approval",
+      "posting": "Posting",
+      "waiting": "Waiting",
+      "paused": "Paused"
+    },
+    "labels": {
+      "page": "PAGE:",
+      "personal_account": "Personal Account"
+    },
+    "tooltips": {
+      "manual_approval": "Manual approval mode is ON",
+      "reset_process": "Reset process",
+      "event_history": "Event History",
+      "edit": "Edit",
+      "delete": "Delete",
+      "go_to_browser": "Go to Browser",
+      "stop_queue": "Stop Queue"
+    },
+    "progress": {
+      "title": "Post Progress",
+      "post_count": "Post {{current}}/{{total}}",
+      "groups": "groups",
+      "next_group": "Next Group:",
+      "completed": "Completed"
+    },
+    "logs": {
+      "updated_at": "Updated {{time}}",
+      "title": "Logs: {{name}}",
+      "subtitle": "Stores the last 100 activities.",
+      "empty_state": "No activity logs yet.",
+      "open_post_link": "Open post link"
+    },
+    "modal": {
+      "add_title": "Create New Queue",
+      "edit_title": "Edit Queue",
+      "subtitle": "Configure your posts and target group list.",
+      "labels": {
+        "queue_name": "Queue Name",
+        "profile": "Profile",
+        "posting_identity": "Posting Identity (Personal/Page)",
+        "delay_minutes": "Delay between posts (Minutes)",
+        "manual_approval": "Manual Approval Mode",
+        "post_list": "Post List ({{count}})"
+      },
+      "placeholders": {
+        "queue_name": "e.g., Real Estate Queue",
+        "delay_minutes": "Default: 5 minutes",
+        "post_content": "Enter post content..."
+      },
+      "options": {
+        "select_profile": "-- Select Profile --",
+        "personal_account": "Personal Account"
+      },
+      "descriptions": {
+        "manual_approval": "The queue will pause at each post to allow manual over-the-shoulder review."
+      },
+      "buttons": {
+        "add_post": "+ Add Post",
+        "browse_image": "Browse Image",
+        "cancel": "Cancel",
+        "saving": "Saving...",
+        "update_config": "Update Configuration",
+        "save_config": "Save Configuration"
+      },
+      "master_post": "MASTER POST #{{index}}",
+      "alerts": {
+        "confirm_delete": "Are you sure you want to delete queue \"{{name}}\"?",
+        "confirm_reset": "Do you want to reset the queue process \"{{name}}\"? This will clear all logs and restart from the first group.",
+        "missing_name": "Please enter queue name.",
+        "missing_profile": "Please select a profile.",
+        "min_posts": "Please add at least 1 post.",
+        "valid_post": "At least 1 post must have content.",
+        "min_groups": "Please select at least 1 group.",
+        "error_saving": "Error saving queue: ",
+        "error_deleting": "Error deleting queue: ",
+        "error_stopping": "Error stopping queue: ",
+        "error_approving": "Error confirming approval: ",
+        "error_focusing": "Error focusing browser: ",
+        "error_resetting": "Reset error: ",
+        "error_stopping_all": "Error stopping all: "
+      }
+    }
+  },
+  "sync_queue": {
+    "title": "Group Sync Management",
+    "subtitle": "Automated Cross-Group Content Replication & Distribution",
+    "buttons": {
+      "stop_all": "Stop All",
+      "create_task": "Create Sync Task",
+      "start_sync": "Start Sync",
+      "stop_sync": "Stop Sync",
+      "stop": "Stop"
+    },
+    "loading": "Loading sync queues...",
+    "empty_state": "No sync tasks found. Create your first task to automate content replication across groups.",
+    "badges": {
+      "syncing": "Syncing"
+    },
+    "labels": {
+      "posting_identity": "POSTING IDENTITY:"
+    },
+    "progress": {
+      "source_progress": "Source Progress",
+      "source_count": "Source {{current}}/{{total}}",
+      "targets": "targets",
+      "current_target": "Current Target:"
+    },
+    "tooltips": {
+      "stop_sync": "Stop Sync"
+    },
+    "logs": {
+      "open_related_link": "Open related link"
+    },
+    "modal": {
+      "add_title": "Create New Sync Task",
+      "edit_title": "Edit Sync Task",
+      "subtitle": "Configure source groups and target destinations.",
+      "labels": {
+        "task_name": "Task Name",
+        "delay_groups": "Delay between groups (minutes)",
+        "source_urls": "Source URLs ({{count}})",
+        "target_destinations": "Target Destinations ({{count}})"
+      },
+      "placeholders": {
+        "task_name": "e.g., Weekly Real Estate Sync",
+        "delay_groups": "e.g., 5",
+        "source_url": "https://facebook.com/groups/source-group"
+      },
+      "descriptions": {
+        "delay_groups": "To avoid Facebook checkpoints. Recommended: 5-10 minutes.",
+        "manual_approval": "The task will pause at each post to allow manual editing before replication."
+      },
+      "buttons": {
+        "add_source": "+ Add Source",
+        "select_all": "Select All",
+        "deselect_all": "Deselect All"
+      },
+      "empty_sources": "No source URLs added. Add at least one group URL to scrape posts from.",
+      "empty_targets": "No groups managed yet.",
+      "alerts": {
+        "confirm_delete": "Are you sure you want to delete campaign \"{{name}}\"?",
+        "confirm_reset": "Do you want to reset the process \"{{name}}\"? This will clear all logs and restart from the first group.",
+        "missing_name": "Please enter campaign name.",
+        "missing_profile": "Please select a profile.",
+        "min_groups": "Please select at least 1 group.",
+        "invalid_delay": "Invalid delay time.",
+        "error_stopping": "Error stopping process: ",
+        "missing_profile_start": "The Facebook profile for this queue no longer exists. Please edit the queue and select a valid profile."
+      }
+    }
+  },
+  "backend": {
+    "status": {
+      "initializing_browser": "Initializing browser...",
+      "setting_cookies": "Setting cookies...",
+      "posting_personal": "Posting with personal account.",
+      "finished_posting": "Finished posting to all groups!",
+      "success_posted": "Successfully posted to all groups in queue.",
+      "queue_stopped": "Queue stopped.",
+      "loop_error": "Loop error: {{message}}",
+      "step_success": "Step successful. Waiting for {{minutes}} minutes...",
+      "preparing": "Preparing...",
+      "waiting_manual": "Waiting for manual approval. Please review on browser and click \"Continue\" in the app.",
+      "approval_required": "Queue \"{{name}}\" requires approval to post.",
+      "approved_retrieving": "Approved. Retrieving post URL...",
+      "retrieving": "Retrieving post URL...",
+      "post_sent_pending": "Post sent successfully (pending admin approval): {{group}} ({{step}})",
+      "posted_success_url": "Posted successfully: {{group}} ({{step}}). URL: {{url}}",
+      "posted_success_no_url": "Posted successfully: {{group}} ({{step}}) (Link not retrieved)",
+      "post_published": "Post published successfully.",
+      "error_at_group": "Error at group {{group}}: {{message}}",
+      "finished_syncing": "Finished synchronizing content to all target groups!",
+      "success_sync": "Successfully synchronized to all targets.",
+      "scanning_source": "Scanning source group for new posts...",
+      "found_new": "Found {{count}} new posts. Filtering by time/duplicate...",
+      "no_valid_posts": "No new valid posts found to sync.",
+      "start_syncing": "Start syncing post: {{id}}...",
+      "syncing_to": "Synching to {{group}}...",
+      "success_synced_url": "Successfully synced post {{id}} to {{group}}. URL: {{url}}",
+      "success_synced_no_url": "Successfully synced post {{id}} to {{group}} (Link not retrieved)",
+      "failed_sync": "Failed to sync post {{id}}: Error at target group {{group}}: {{message}}",
+      "switching_fanpage": "Switching to Fanpage URL: {{url}}",
+      "switch_success": "Successfully switched to Fanpage Context.",
+      "accessing_pages": "Accessing Facebook Pages...",
+      "failed_pages": "Failed to load Facebook Pages context",
+      "processing_page": "Processing page URL: {{url}}",
+      "discovered_pages": "Successfully discovered {{count}} Pages.",
+      "browser_launched": "Browser launched successfully. Please follow instructions.",
+      "unknown_error": "Unknown error",
+      "system_loop_error": "System loop error: {{message}}",
+      "switching_identity": "Switching identity to Fanpage...",
+      "accessing_page_url": "Accessing Page: {{url}}...",
+      "searching_switch_btn": "Searching for switch button...",
+      "switch_btn_found": "Switch button found, clicking...",
+      "waiting_identity_change": "Switch button clicked, waiting for identity change (max 10s)...",
+      "identity_changed_immediate": "Navigation/cookie change detected — identity switched immediately.",
+      "modal_detected": "Modal detected, clicking confirm...",
+      "waiting_fb_switch": "Confirmed. Waiting for Facebook to switch identity...",
+      "identity_switch_success": "Identity switched successfully.",
+      "no_modal_detected": "No modal or navigation change detected. Checking current identity...",
+      "checking_actual_identity": "Checking actual identity...",
+      "already_fanpage": "Account is already using Fanpage identity.",
+      "opening_photo_action": "Opening add photo/video action...",
+      "uploading_file_chooser": "Uploading image via File Chooser...",
+      "uploading_fallback": "Uploading image to composer (fallback)...",
+      "opening_group_page": "Opening Facebook group page...",
+      "popup_detected": "Account confirmation popup detected, automatically clicking Continue/Close...",
+      "setting_cookies_profile": "Setting Facebook Cookies for profile...",
+      "waiting_composer_area": "Waiting for composer post area to appear...",
+      "entering_post_content": "Entering post content...",
+      "content_filled_review": "Content and image filled. Please review and click Post manually in the browser.",
+      "error_screenshot_saved": "Error screenshot saved at: {{path}}",
+      "initializing_sync_browser": "Initializing Sync browser...",
+      "using_personal_account": "Using personal account.",
+      "all_groups_joined_success": "Successfully requested to join all groups!",
+      "completed_all_groups": "Completed all groups in queue.",
+      "pausing_minutes_before": "Pausing for approximately {{minutes}} minutes before continuing...",
+      "starting_processing_task": "Starting processing...",
+      "processed_group_result": "Successfully processed group {{name}}: {{status}}",
+      "error_at_group_log": "Error at group {{name}}: {{message}}",
+      "accessing_group_url": "Accessing: {{url}}",
+      "join_request_sent_url": "Join request sent: {{url}}",
+      "group_pending_approval_url": "Group pending approval: {{url}}",
+      "already_member_url": "Already a member: {{url}}",
+      "join_btn_not_found_url": "Join button not found (private group or error): {{url}}",
+      "error_accessing_group_url": "Error accessing group {{url}}: {{message}}",
+      "searching_composer_btn": "Searching for create post button...",
+      "shortcut_p_attempt": "Create post button not found. Attempting to open composer using shortcut \"P\"...",
+      "status_joined": "Joined",
+      "status_pending": "Pending approval",
+      "status_join_clicked": "Join requested",
+      "status_unknown": "Unknown",
+      "status_failed": "Failed"
+    },
+    "errors": {
+      "no_posts": "No posts available.",
+      "no_groups": "No target groups.",
+      "facebook_login": "Facebook requested login. Invalid or expired Cookies.",
+      "post_button": "Post button not found.",
+      "facebook_login_2": "Facebook is requesting login. Cookies might be expired or invalid.",
+      "file_input": "File input not found for image upload.",
+      "composer_failed": "Composer opened but failed to enter post content.",
+      "composer_not_found": "Post content input area not found.",
+      "direct_selector": "Direct selector not found.",
+      "cannot_switch": "Could not automatically switch Fanpage. Please switch manually or check your Cookies.",
+      "switch_failed": "Switching logic failed.",
+      "queue_name_empty": "Queue name cannot be empty.",
+      "queue_name_empty_2": "Task name cannot be empty.",
+      "no_profile": "No Facebook profile selected.",
+      "min_groups": "Queue must have at least 1 group.",
+      "page_in_use": "This Page is currently being used by running queue \"{{name}}\". Please stop it first.",
+      "page_in_use_sync": "This Page is currently being used by running Sync Process \"{{name}}\". Please stop it first.",
+      "process_running": "This process is already running.",
+      "queue_not_exist": "Process does not exist.",
+      "profile_no_cookies": "Profile does not exist or has no cookies.",
+      "min_post": "Queue must have at least 1 post.",
+      "queue_not_exist_2": "Queue does not exist.",
+      "profile_not_exist": "The selected profile no longer exists.",
+      "invalid_cookies": "Profile does not have valid cookies.",
+      "image_not_found": "Image file not found: {{path}}",
+      "no_valid_groups": "No valid groups found for this queue.",
+      "cannot_reset_running": "Cannot reset while queue is running. Please stop it first.",
+      "session_open": "A Facebook session is already open. Please complete or close the current session first.",
+      "missing_cookies": "Missing Facebook Cookie string. Please enter the Cookie string in the UI.",
+      "post_content_empty": "Post content is empty.",
+      "selected_image_not_found": "Selected image file not found."
+    },
+    "progress": {
+      "step_label": "Group {{groupIndex}}/{{groupTotal}}, Post {{postIndex}}/{{postTotal}}"
+    }
+  }
+}
