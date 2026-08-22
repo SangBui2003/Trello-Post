@@ -19,20 +19,34 @@ import {
   RotateCcw,
   RefreshCw,
   DownloadCloud,
+  LayoutGrid,
+  LayoutList,
+  Search,
+  GripVertical,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react'
 import TrelloImportModal from '../components/TrelloImportModal'
 
-const EMPTY_POST = { content: '', commentText: '', imagePath: '', imageBase64: '' }
+const EMPTY_POST = { content: '', commentText: '', imagePath: '', imageBase64: '', enableSchedule: false, scheduledTime: '' }
 
 const EMPTY_FORM = {
   name: '',
   profileId: '',
   pageIdentity: 'personal',
   posts: [{ ...EMPTY_POST }],
-  delayMinutes: 5,
   approvalMode: false,
-  enableTimer: true,
 }
+
+const ACCENT_COLORS = [
+  'border-l-blue-500',
+  'border-l-emerald-500',
+  'border-l-purple-500',
+  'border-l-amber-500',
+  'border-l-pink-500',
+  'border-l-teal-500',
+  'border-l-indigo-500'
+];
 
 function formatDate(value) {
   if (!value) return '--'
@@ -66,6 +80,18 @@ export default function PostQueuePage() {
   const [errorStatus, setErrorStatus] = useState('')
   const [showLogsId, setShowLogsId] = useState(null)
   const [isTrelloModalOpen, setIsTrelloModalOpen] = useState(false)
+  const [viewLayout, setViewLayout] = useState(() => localStorage.getItem('postQueueLayout') || 'grid')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [queueOrder, setQueueOrder] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('queueOrder') || '[]') } catch { return [] }
+  })
+  const [draggedId, setDraggedId] = useState(null)
+
+  const toggleLayout = () => {
+    const newLayout = viewLayout === 'grid' ? 'list' : 'grid'
+    setViewLayout(newLayout)
+    localStorage.setItem('postQueueLayout', newLayout)
+  }
 
   const hasDesktopBridge = Boolean(window.desktopApp)
 
@@ -131,6 +157,66 @@ export default function PostQueuePage() {
   const availablePages = selectedProfile?.pages || []
   const readyProfiles = profiles.length > 0
 
+  const sortedQueues = useMemo(() => {
+    const sorted = [...queues]
+    sorted.sort((a, b) => {
+      const idxA = queueOrder.indexOf(a.id)
+      const idxB = queueOrder.indexOf(b.id)
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB
+      if (idxA !== -1) return -1
+      if (idxB !== -1) return 1
+      return 0
+    })
+    return sorted
+  }, [queues, queueOrder])
+
+  const filteredQueues = useMemo(() => {
+    if (!searchQuery.trim()) return sortedQueues
+    const query = searchQuery.toLowerCase()
+    return sortedQueues.filter(q => q.name?.toLowerCase().includes(query))
+  }, [sortedQueues, searchQuery])
+
+  const handleDragStart = (e, id) => {
+    if (searchQuery) {
+      e.preventDefault()
+      return
+    }
+    setDraggedId(id)
+    e.dataTransfer.effectAllowed = 'move'
+    setTimeout(() => {
+      if (e.target) e.target.style.opacity = '0.5'
+    }, 0)
+  }
+
+  const handleDragEnd = (e) => {
+    if (e.target) e.target.style.opacity = '1'
+    setDraggedId(null)
+  }
+
+  const handleDragOver = (e) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  const handleDrop = (e, targetId) => {
+    e.preventDefault()
+    if (!draggedId || draggedId === targetId || searchQuery) return
+
+    const currentIndex = sortedQueues.findIndex(q => q.id === draggedId)
+    const targetIndex = sortedQueues.findIndex(q => q.id === targetId)
+    
+    if (currentIndex === -1 || targetIndex === -1) return
+
+    const newOrder = [...sortedQueues]
+    const [draggedItem] = newOrder.splice(currentIndex, 1)
+    newOrder.splice(targetIndex, 0, draggedItem)
+
+    const newOrderIds = newOrder.map(q => q.id)
+    setQueueOrder(newOrderIds)
+    localStorage.setItem('queueOrder', JSON.stringify(newOrderIds))
+    setDraggedId(null)
+  }
+
 
   // --- Form handlers ---
 
@@ -156,12 +242,12 @@ export default function PostQueuePage() {
             content: post.content || '', 
             commentText: post.commentText || '',
             imagePath: post.imagePath || '',
-            imageBase64: post.imageBase64 || ''
+            imageBase64: post.imageBase64 || '',
+            enableSchedule: !!post.enableSchedule,
+            scheduledTime: post.scheduledTime || ''
           }))
         : [{ ...EMPTY_POST }],
-      delayMinutes: Number(queue.delayMinutes) || 5,
       approvalMode: queue.approvalMode || false,
-      enableTimer: queue.enableTimer !== undefined ? queue.enableTimer : true,
     })
     setErrorStatus('')
     setIsModalOpen(true)
@@ -198,7 +284,7 @@ export default function PostQueuePage() {
   const addPost = () => {
     setForm((prev) => ({
       ...prev,
-      posts: [...prev.posts, { ...EMPTY_POST }],
+      posts: [{ ...EMPTY_POST }, ...prev.posts],
     }))
   }
 
@@ -207,6 +293,20 @@ export default function PostQueuePage() {
       ...prev,
       posts: prev.posts.filter((_, i) => i !== index),
     }))
+  }
+
+  const movePost = (index, direction) => {
+    setForm((prev) => {
+      const newPosts = [...prev.posts];
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= newPosts.length) return prev;
+      
+      const temp = newPosts[index];
+      newPosts[index] = newPosts[targetIndex];
+      newPosts[targetIndex] = temp;
+      
+      return { ...prev, posts: newPosts };
+    });
   }
 
   const updatePost = (index, field, value) => {
@@ -250,9 +350,7 @@ export default function PostQueuePage() {
       profileId: form.profileId,
       pageIdentity: form.pageIdentity || 'personal',
       posts: form.posts.filter((post) => post.content.trim()),
-      delayMinutes: Number(form.delayMinutes) || 5,
       approvalMode: form.approvalMode,
-      enableTimer: form.enableTimer,
     }
 
     try {
@@ -381,6 +479,23 @@ export default function PostQueuePage() {
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <div className="relative mr-2 group/search hidden md:block">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 group-focus-within/search:text-blue-500 transition-colors" />
+            <input
+              type="text"
+              placeholder={t('post_queue.search_placeholder') || 'Tìm kiếm thẻ...'}
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="pl-9 pr-3 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all w-48 focus:w-64"
+            />
+          </div>
+          <button
+            onClick={toggleLayout}
+            className="p-2 text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 dark:text-slate-400 dark:hover:text-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg transition-colors border border-slate-200 dark:border-slate-700 mr-2"
+            title={viewLayout === 'grid' ? "Chuyển sang Bố cục Dọc" : "Chuyển sang Bố cục Ngang"}
+          >
+            {viewLayout === 'grid' ? <LayoutList className="w-5 h-5" /> : <LayoutGrid className="w-5 h-5" />}
+          </button>
           {runningIds.length > 0 && (
             <button
               onClick={handleStopAll}
@@ -409,33 +524,46 @@ export default function PostQueuePage() {
         </div>
       )}
 
-      {/* Queue list */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 flex-1 overflow-auto p-5 transition-colors">
         {loading ? (
           <div className="py-20 text-center text-slate-400 dark:text-slate-500">{t('post_queue.loading')}</div>
-        ) : queues.length === 0 ? (
+        ) : filteredQueues.length === 0 ? (
           <div className="py-20 px-8 text-center text-slate-400 dark:text-slate-500 bg-slate-50/50 dark:bg-slate-800/30 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
-            {t('post_queue.empty_state')}
+            {searchQuery ? 'Không tìm thấy thẻ nào phù hợp.' : t('post_queue.empty_state')}
           </div>
         ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 pb-10">
-            {queues.map((queue) => {
+          <div className={viewLayout === 'grid' ? "flex flex-row overflow-x-auto gap-6 pb-4 custom-scrollbar items-stretch" : "flex flex-col gap-4 pb-10"}>
+            {filteredQueues.map((queue, index) => {
               const isRunning = runningIds.includes(queue.id)
               const postCount = queue.posts?.length || 0
               const state = queue.state || { currentPostIndex: 0, status: 'idle' }
               const lastLog = queue.logs && queue.logs.length > 0 ? queue.logs[queue.logs.length - 1] : null
               const isPendingApproval = isRunning && state.status === 'pending_approval'
+              const queueColor = ACCENT_COLORS[index % ACCENT_COLORS.length]
 
               return (
                 <article
                   key={queue.id}
-                  className={`rounded-2xl border transition-all duration-300 flex flex-col group/card h-full ${
-                    isRunning ? 'border-blue-300 ring-4 ring-blue-50 dark:ring-blue-900/20 bg-white dark:bg-slate-800' : 'border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/50'
-                  }`}
+                  draggable={!searchQuery}
+                  onDragStart={(e) => handleDragStart(e, queue.id)}
+                  onDragEnd={handleDragEnd}
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, queue.id)}
+                  className={`rounded-2xl border border-slate-200 dark:border-slate-700 border-l-[4px] transition-all duration-300 flex flex-col group/card h-full hover:-translate-y-1 hover:shadow-lg ${queueColor} ${
+                    viewLayout === 'grid' ? 'min-w-[340px] w-[340px] shrink-0' : 'w-full'
+                  } ${
+                    isRunning ? 'border-blue-300 ring-4 ring-blue-50 dark:ring-blue-900/20 bg-white dark:bg-slate-800' : 'bg-slate-50/50 dark:bg-slate-800/50'
+                  } ${draggedId === queue.id ? 'opacity-50' : ''}`}
                 >
-                  <div className="p-5 flex-1 pb-3">
+                  <div className="p-5 flex-1 pb-3 relative">
+                    {/* Drag Handle */}
+                    {!searchQuery && (
+                      <div className="absolute top-2 left-2 p-1 text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing opacity-0 group-hover/card:opacity-100 transition-opacity">
+                        <GripVertical className="w-5 h-5" />
+                      </div>
+                    )}
                     {/* Card header */}
-                    <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start justify-between gap-4 mt-2">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 truncate" title={queue.name}>{queue.name}</h3>
@@ -732,27 +860,6 @@ export default function PostQueuePage() {
                           {availablePages.map(p => <option key={p.id} value={p.pageUrl}>{p.pageName}</option>)}
                         </select>
                       </div>
-                      <div className="col-span-2 sm:col-span-1">
-                        <label className="flex items-center gap-2 text-[11px] font-black text-slate-400 dark:text-slate-500 mb-1.5 uppercase tracking-widest cursor-pointer select-none">
-                          <input
-                            type="checkbox"
-                            checked={form.enableTimer}
-                            onChange={(e) => updateForm('enableTimer', e.target.checked)}
-                            className="rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 dark:border-slate-600"
-                          />
-                          Bật hẹn giờ đăng bài (phút)
-                        </label>
-                        <input
-                          type="number"
-                          min="3"
-                          max="60"
-                          value={form.delayMinutes || ''}
-                          onChange={(e) => updateForm('delayMinutes', e.target.value)}
-                          disabled={!form.enableTimer}
-                          className="input-field font-bold disabled:opacity-50 disabled:bg-slate-100 dark:disabled:bg-slate-800"
-                          placeholder={t('post_queue.modal.placeholders.delay_minutes')}
-                        />
-                      </div>
                     </div>
 
                     <div className="pt-2">
@@ -790,16 +897,60 @@ export default function PostQueuePage() {
                          </button>
                        </div>
                     </div>
-                    <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar">
-                       {form.posts.map((post, index) => (
-                         <div key={index} className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm relative group">
-                            <button 
-                              onClick={() => removePost(index)}
-                              className="absolute top-5 right-5 text-slate-300 dark:text-slate-600 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
-                            >
-                              <Trash2 className="w-5 h-5" />
-                            </button>
+                     <div className="space-y-5 overflow-y-auto pr-2 custom-scrollbar">
+                       {form.posts.map((post, index) => {
+                         const postColor = ACCENT_COLORS[index % ACCENT_COLORS.length];
+                         return (
+                         <div key={index} className={`bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 border-l-[4px] ${postColor} shadow-sm hover:shadow-md transition-all duration-200 relative group`}>
+                            <div className="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm p-1 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
+                               {index > 0 && (
+                                <button 
+                                  onClick={() => movePost(index, -1)}
+                                  className="text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 p-1.5 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                                  title="Di chuyển lên"
+                                >
+                                  <ArrowUp className="w-4 h-4" />
+                                </button>
+                               )}
+                               {index < form.posts.length - 1 && (
+                                <button 
+                                  onClick={() => movePost(index, 1)}
+                                  className="text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 p-1.5 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                                  title="Di chuyển xuống"
+                                >
+                                  <ArrowDown className="w-4 h-4" />
+                                </button>
+                               )}
+                                <button 
+                                  onClick={() => removePost(index)}
+                                  className="text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg ml-1 transition-colors"
+                                  title="Xóa bài đăng"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                            </div>
                             <span className="text-[10px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-[0.2em] block mb-3">{t('post_queue.modal.master_post', {index: index+1})}</span>
+                            
+                            <div className="mb-4 flex flex-col gap-3 p-3 bg-slate-50/50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800">
+                              <label className="flex items-center gap-2 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={post.enableSchedule || false}
+                                  onChange={(e) => updatePost(index, 'enableSchedule', e.target.checked)}
+                                  className="rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 dark:border-slate-600"
+                                />
+                                Hẹn giờ cho bài đăng này
+                              </label>
+                              {post.enableSchedule && (
+                                <input
+                                  type="datetime-local"
+                                  value={post.scheduledTime || ''}
+                                  onChange={(e) => updatePost(index, 'scheduledTime', e.target.value)}
+                                  className="input-field py-2 text-sm max-w-sm font-mono font-bold text-slate-700 dark:text-slate-300"
+                                />
+                              )}
+                            </div>
+
                             <textarea
                               rows={6}
                               value={post.content}
@@ -842,7 +993,8 @@ export default function PostQueuePage() {
                                )}
                              </div>
                          </div>
-                       ))}
+                         )
+                       })}
                     </div>
                   </div>
                 </div>
@@ -874,14 +1026,16 @@ export default function PostQueuePage() {
         isOpen={isTrelloModalOpen}
         onClose={() => setIsTrelloModalOpen(false)}
         queueId={editingQueue ? editingQueue.id : 'new'}
-        onImport={(data) => {
+        onImport={(dataArray) => {
           setForm(prev => {
-            // If there's an empty post, replace it, otherwise append
             const newPosts = [...prev.posts];
+            const dataToInsert = Array.isArray(dataArray) ? dataArray : [dataArray];
+            
+            // If there's an empty post, replace it, otherwise append to top
             if (newPosts.length === 1 && !newPosts[0].content && !newPosts[0].imagePath) {
-              newPosts[0] = data;
+              newPosts.splice(0, 1, ...dataToInsert);
             } else {
-              newPosts.push(data);
+              newPosts.unshift(...dataToInsert);
             }
             return { ...prev, posts: newPosts };
           });

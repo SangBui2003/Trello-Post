@@ -108,23 +108,29 @@ async function openComposer(page, timeoutMs, onStatus) {
   const strategies = [
     async () => {
       onStatus(t('backend.status.searching_composer_btn'));
-      const createPostButton = await page.evaluateHandle(() => {
-        const texts = ['viết gì', 'write something', 'tạo bài viết', 'nghĩ gì', 'mind', 'bạn đang nghĩ gì'];
-        // Search in spans, role="button" divs, and common Facebook clickable classes
-        const elements = Array.from(document.querySelectorAll('span, div[role="button"], div.x1i10hfl, div[style*="cursor: pointer"]'));
-        
-        for (const el of elements) {
-          const text = (el.innerText || '').toLowerCase();
-          // We only want relatively short text blocks, not the whole page body
-          if (text.length > 0 && text.length < 50) {
-            if (texts.some((t) => text.includes(t))) {
-              return el;
+      const startedAt = Date.now();
+      let el = null;
+      
+      while (Date.now() - startedAt < 10000) {
+        const createPostButton = await page.evaluateHandle(() => {
+          const texts = ['viết gì', 'write something', 'tạo bài viết', 'nghĩ gì', 'mind', 'bạn đang nghĩ gì'];
+          const elements = Array.from(document.querySelectorAll('span, div[role="button"], div.x1i10hfl, div[style*="cursor: pointer"]'));
+          
+          for (const el of elements) {
+            const text = (el.innerText || '').toLowerCase();
+            if (text.length > 0 && text.length < 50) {
+              if (texts.some((t) => text.includes(t))) {
+                return el;
+              }
             }
           }
-        }
-        return null;
-      });
-      const el = createPostButton.asElement();
+          return null;
+        });
+        el = createPostButton.asElement();
+        if (el) break;
+        await delay(1000);
+      }
+      
       if (!el) throw new Error(t('backend.errors.direct_selector'));
       await safeClick(page, el);
     },

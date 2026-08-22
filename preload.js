@@ -18,7 +18,7 @@ contextBridge.exposeInMainWorld('desktopApp', {
   getProfiles: () => ipcRenderer.invoke('profile:list'),
   openProfile: (id) => ipcRenderer.invoke('profile:open', id),
   deleteProfile: (id) => ipcRenderer.invoke('profile:delete', id),
-  startProfileLogin: () => ipcRenderer.invoke('profile:start_login'),
+  startProfileLogin: (profileId) => ipcRenderer.invoke('profile:start_login', profileId),
   saveProfile: (payload) => ipcRenderer.invoke('profile:save', payload),
   
   getGroups: () => ipcRenderer.invoke('group:list'),
@@ -111,6 +111,8 @@ contextBridge.exposeInMainWorld('desktopApp', {
   loginTinfos: () => ipcRenderer.invoke('trello:login_tinfos'),
   getTinfosConfig: () => ipcRenderer.invoke('trello:get_tinfos_config'),
   saveTinfosConfig: (config) => ipcRenderer.invoke('trello:save_tinfos_config', config),
+  getCTAConfig: () => ipcRenderer.invoke('trello:get_cta_config'),
+  saveCTAConfig: (config) => ipcRenderer.invoke('trello:save_cta_config', config),
   getTrelloSelections: (queueId) => ipcRenderer.invoke('trello:get_selections', queueId),
   saveTrelloSelections: (payload) => ipcRenderer.invoke('trello:save_selections', payload),
 });

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import {
   Plus, Trash2, X, RefreshCw, KeyRound,
-  ChevronDown, ChevronUp, ExternalLink, Edit2, Check, Globe
+  ChevronDown, ChevronUp, ExternalLink, Edit2, Check, Globe, GripVertical
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import ProfileFormModal from '../components/ProfileFormModal'
@@ -26,6 +26,11 @@ export default function ProfileManagerPage() {
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false)
   const [updateProfileId, setUpdateProfileId] = useState(null)
   const [updateProfileName, setUpdateProfileName] = useState('')
+  
+  const [profileOrder, setProfileOrder] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('profileOrder') || '[]') } catch { return [] }
+  })
+  const [draggedId, setDraggedId] = useState(null)
 
   const loadProfiles = async () => {
     if (!window.desktopApp) {
@@ -53,6 +58,56 @@ export default function ProfileManagerPage() {
   useEffect(() => {
     loadProfiles()
   }, [])
+
+  const sortedProfiles = React.useMemo(() => {
+    const sorted = [...profiles]
+    sorted.sort((a, b) => {
+      const idxA = profileOrder.indexOf(a.id)
+      const idxB = profileOrder.indexOf(b.id)
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB
+      if (idxA !== -1) return -1
+      if (idxB !== -1) return 1
+      return 0
+    })
+    return sorted
+  }, [profiles, profileOrder])
+
+  const handleDragStart = (e, id) => {
+    setDraggedId(id)
+    e.dataTransfer.effectAllowed = 'move'
+    setTimeout(() => {
+      if (e.target) e.target.style.opacity = '0.5'
+    }, 0)
+  }
+
+  const handleDragEnd = (e) => {
+    if (e.target) e.target.style.opacity = '1'
+    setDraggedId(null)
+  }
+
+  const handleDragOver = (e) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  const handleDrop = (e, targetId) => {
+    e.preventDefault()
+    if (!draggedId || draggedId === targetId) return
+
+    const currentIndex = sortedProfiles.findIndex(p => p.id === draggedId)
+    const targetIndex = sortedProfiles.findIndex(p => p.id === targetId)
+    
+    if (currentIndex === -1 || targetIndex === -1) return
+
+    const newOrder = [...sortedProfiles]
+    const [draggedItem] = newOrder.splice(currentIndex, 1)
+    newOrder.splice(targetIndex, 0, draggedItem)
+
+    const newOrderIds = newOrder.map(p => p.id)
+    setProfileOrder(newOrderIds)
+    localStorage.setItem('profileOrder', JSON.stringify(newOrderIds))
+    setDraggedId(null)
+  }
 
   // --- Add profile ---
   const openAddModal = () => {
@@ -203,20 +258,32 @@ export default function ProfileManagerPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {profiles.length === 0 ? (
+            {sortedProfiles.length === 0 ? (
               <tr>
                 <td colSpan="4" className="py-12 text-center text-slate-400 dark:text-slate-500 font-medium">{t('profiles.empty_state')}</td>
               </tr>
             ) : (
-              profiles.map((p) => {
+              sortedProfiles.map((p) => {
                 const pageCount = p.pages?.length || 0
                 const isExpanded = expandedProfileId === p.id
                 const isScanning = scanningProfileId === p.id
 
                 return (
                   <React.Fragment key={p.id}>
-                    <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
-                      <td className="py-4 px-6 font-medium text-slate-800 dark:text-slate-200">{p.name}</td>
+                    <tr 
+                      className={`hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors group/row ${draggedId === p.id ? 'opacity-50' : ''}`}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, p.id)}
+                      onDragEnd={handleDragEnd}
+                      onDragOver={handleDragOver}
+                      onDrop={(e) => handleDrop(e, p.id)}
+                    >
+                      <td className="py-4 px-6 font-medium text-slate-800 dark:text-slate-200">
+                        <div className="flex items-center gap-2">
+                          <GripVertical className="w-4 h-4 text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0" />
+                          <span className="truncate">{p.name}</span>
+                        </div>
+                      </td>
                       <td className="py-4 px-6 text-slate-500 dark:text-slate-400">
                         {new Date(p.createdAt).toLocaleDateString('vi-VN', {
                           day: '2-digit', month: '2-digit', year: 'numeric',
@@ -367,6 +434,7 @@ export default function ProfileManagerPage() {
         isOpen={isUpdateModalOpen}
         onClose={() => setIsUpdateModalOpen(false)}
         onSubmit={handleUpdateToken}
+        profileId={updateProfileId}
         profileName={updateProfileName}
         onError={setErrorStatus}
       />

@@ -6,6 +6,25 @@ const TrelloManager = require('../utils/trello');
 const CONFIG_PATH = path.join(app.getPath('userData'), 'trello-config.json');
 const TINFOS_CONFIG_PATH = path.join(app.getPath('userData'), 'tinfos-config.json');
 const TRELLO_SELECTIONS_PATH = path.join(app.getPath('userData'), 'trello-selections.json');
+const CTA_CONFIG_PATH = path.join(app.getPath('userData'), 'cta-config.json');
+
+const DEFAULT_CTAS = ["𝑾𝑨𝑻𝑪𝑯 👉", "𝑭𝒖𝒍𝒍 𝒔𝒕𝒐𝒓𝒚 👉", "𝑹𝒆𝒂𝒅 𝒎𝒐𝒓𝒆 👉", "𝑼𝒑𝒅𝒂𝒕𝒆 𝑵𝒆𝒘 𝑻𝒐𝒅𝒂𝒚👉"];
+
+function getCTAConfig() {
+  if (fs.existsSync(CTA_CONFIG_PATH)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(CTA_CONFIG_PATH, 'utf8'));
+      if (Array.isArray(data)) return data;
+    } catch {
+      return DEFAULT_CTAS;
+    }
+  }
+  return DEFAULT_CTAS;
+}
+
+function saveCTAConfig(config) {
+  fs.writeFileSync(CTA_CONFIG_PATH, JSON.stringify(config, null, 2));
+}
 
 function getTrelloSelections() {
   if (fs.existsSync(TRELLO_SELECTIONS_PATH)) {
@@ -122,6 +141,9 @@ function register(ctx) {
   ipcMain.handle('trello:get_tinfos_config', () => getTinfosConfig());
   ipcMain.handle('trello:save_tinfos_config', (event, config) => { saveTinfosConfig(config); return true; });
 
+  ipcMain.handle('trello:get_cta_config', () => getCTAConfig());
+  ipcMain.handle('trello:save_cta_config', (event, config) => { saveCTAConfig(config); return true; });
+
   ipcMain.handle('trello:get_selections', (event, queueId) => {
     const selections = getTrelloSelections();
     return selections[queueId || 'new'] || { boardId: '', listId: '' };
@@ -135,4 +157,4 @@ function register(ctx) {
   });
 }
 
-module.exports = { register };
+module.exports = { register, getCTAConfig };

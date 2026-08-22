@@ -1,12 +1,17 @@
 const { launchStealthBrowser } = require('../browser/BrowserLauncher');
 
-async function extractFacebookCookie() {
+async function extractFacebookCookie(existingCookies = null) {
   let browser;
   try {
-    browser = await launchStealthBrowser();
+    browser = await launchStealthBrowser({ headless: false });
     
     const [page] = await browser.pages();
     const targetPage = page || (await browser.newPage());
+    
+    if (existingCookies && existingCookies.length > 0) {
+      await targetPage.setCookie(...existingCookies);
+    }
+
     await targetPage.bringToFront();
     
     await targetPage.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded' });

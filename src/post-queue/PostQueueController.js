@@ -179,29 +179,33 @@ class PostQueueController {
 
       if (!this.running) break;
 
-      const enableTimer = this.queue.enableTimer !== undefined ? this.queue.enableTimer : true;
-      const approvalMode = !!this.queue.approvalMode;
+      if (!this.running) break;
 
-      if (enableTimer) {
-        const waitMinutes = Number(this.queue.delayMinutes) || 5;
-        this.onStatus(`[${this.queue.name}] ${t('backend.status.step_success', { minutes: waitMinutes })}`, 'info');
-        await this._updateDBState({ status: 'waiting' });
-        await this._waitInterval(waitMinutes * 60 * 1000);
+      const approvalMode = !!this.queue.approvalMode;
+      const nextIndex = this.state.currentPostIndex;
+      
+      if (nextIndex >= this.queue.posts.length) {
+        continue;
+      }
+
+      const nextPost = this.queue.posts[nextIndex];
+      const hasSchedule = nextPost && nextPost.enableSchedule && nextPost.scheduledTime;
+
+      if (approvalMode) {
+        this.onStatus(`[${this.queue.name}] Chuyển sang bài đăng tiếp theo...`, 'info');
+      } else if (hasSchedule) {
+        this.onStatus(`[${this.queue.name}] Chuyển sang bài đăng tiếp theo (có hẹn giờ)...`, 'info');
       } else {
-        if (approvalMode) {
-          this.onStatus(`[${this.queue.name}] Chuyển sang bài đăng tiếp theo...`, 'info');
-        } else {
-          this.onStatus(`[${this.queue.name}] Đã tự động đăng bài. Chờ bạn nhấn 'Tiếp tục' để đăng bài tiếp theo.`, 'info');
-          await this._updateDBState({ status: 'pending_approval' });
-          const approved = await new Promise(resolve => {
-            this.approvalResolver = resolve;
-          });
-          if (!approved) {
-            this.onStatus(`[${this.queue.name}] ${t('backend.status.queue_stopped')}`, 'info');
-            await this._logToDB(t('backend.status.queue_stopped'), 'info');
-            await this.stop();
-            break;
-          }
+        this.onStatus(`[${this.queue.name}] Đã đăng tự động. Chờ bạn nhấn 'Tiếp tục' để qua bài tiếp theo (tránh spam).`, 'info');
+        await this._updateDBState({ status: 'pending_approval' });
+        const approved = await new Promise(resolve => {
+          this.approvalResolver = resolve;
+        });
+        if (!approved) {
+          this.onStatus(`[${this.queue.name}] ${t('backend.status.queue_stopped')}`, 'info');
+          await this._logToDB(t('backend.status.queue_stopped'), 'info');
+          await this.stop();
+          break;
         }
       }
     }
@@ -225,6 +229,22 @@ class PostQueueController {
 
     const stepLabel = `Post ${pIndex + 1}/${posts.length}`;
     const prefix = `[${this.queue.name}] [${stepLabel}]`;
+
+    if (post.enableSchedule && post.scheduledTime) {
+      const targetTime = new Date(post.scheduledTime).getTime();
+      const now = Date.now();
+      const waitMs = targetTime - now;
+      if (waitMs > 0) {
+        const targetStr = new Date(targetTime).toLocaleString('vi-VN', {
+          day: '2-digit', month: '2-digit', year: 'numeric',
+          hour: '2-digit', minute: '2-digit'
+        });
+        this.onStatus(`${prefix}: Đang chờ đến giờ hẹn: ${targetStr}`, 'info');
+        await this._updateDBState({ status: 'waiting' });
+        await this._waitInterval(waitMs);
+        if (!this.running) return 'stopped';
+      }
+    }
 
     this.onStatus(`${prefix}: ${t('backend.status.preparing')}`, 'running');
     await this._updateDBState({ status: 'running' });
@@ -355,9 +375,10 @@ class PostQueueController {
               const urlMatch = content.match(/(https?:\/\/[^\s\n]+)/);
               if (urlMatch) {
                 const wrappedLink = urlMatch[0];
-                const ctaList = ["𝑾𝑨𝑻𝑪𝑯 👉", "𝑭𝒖𝒍𝒍 𝒔𝒕𝒐𝒓𝒚 👉", "𝑹𝒆𝒂𝒅 𝒎𝒐𝒓𝒆 👉", "𝑼𝒑𝒅𝒂𝒕𝒆 𝑵𝒆𝒘 𝑻𝒐𝒅𝒂𝒚👉"];
-                const cta = ctaList[Math.floor(Math.random() * ctaList.length)];
-                commentText = `${cta} ${wrappedLink}`;
+                const { getCTAConfig } = require('../ipc/trello');
+                const ctaList = getCTAConfig();
+                const cta = ctaList.length > 0 ? ctaList[Math.floor(Math.random() * ctaList.length)] : "";
+                commentText = `${cta} ${wrappedLink}`.trim();
               }
             }
           }
@@ -371,19 +392,13 @@ class PostQueueController {
 
             this.onStatus(`${prefix}: Đang nhập bình luận: "${commentText}"`, 'running');
             await box.focus();
+            await delay(800);
+
+            // Dùng CDP Input.insertText — inject thẳng vào browser, không dùng OS clipboard
+            const commentCdp = await postPage.target().createCDPSession();
+            await commentCdp.send('Input.insertText', { text: commentText });
+            await commentCdp.detach();
             await delay(1000);
-
-            const { clipboard } = require('electron');
-            clipboard.clear();
-            clipboard.writeText(commentText);
-
-            // Force focus window
-            await this.focus();
-
-            await postPage.keyboard.down('Control');
-            await postPage.keyboard.press('KeyV');
-            await postPage.keyboard.up('Control');
-            await delay(2000);
 
             this.onStatus(`${prefix}: Đang gửi bình luận...`, 'running');
             await postPage.keyboard.press('Enter');
@@ -470,7 +485,12 @@ class PostQueueController {
       const { nativeImage, clipboard } = require('electron');
 
       if (effectiveImagePath || post.imageBase64) {
-        this.onStatus(`${prefix}: Đang dán ảnh qua Clipboard...`, 'running');
+        this.onStatus(`${prefix}: Đang upload ảnh...`, 'running');
+
+        // Lưu lại nội dung clipboard hiện tại của người dùng để khôi phục sau
+        const savedClipboardText = clipboard.readText();
+        const savedClipboardImage = clipboard.readImage();
+
         try {
           let img;
           if (post.imageBase64) {
@@ -485,18 +505,15 @@ class PostQueueController {
             await composer.click();
             await delay(1000);
 
-            // Force focus
             await this.focus();
-
             await page.keyboard.down('Control');
             await page.keyboard.press('KeyV');
             await page.keyboard.up('Control');
 
             this.onStatus(`${prefix}: Đã dán ảnh, chờ load...`, 'running');
-            await delay(2000); // Wait for image to process
+            await delay(2000);
           } else {
             this.onStatus(`${prefix}: Không thể đọc ảnh từ file, thử upload thủ công...`, 'warning');
-            // Fallback to uploadFile if clipboard fails
             const fileInputHandle = await page.evaluateHandle(() => {
               const inputs = Array.from(document.querySelectorAll('input[type="file"]'));
               return inputs.length > 0 ? inputs[inputs.length - 1] : null;
@@ -508,31 +525,38 @@ class PostQueueController {
             }
           }
         } catch (e) {
-          this.onStatus(`${prefix}: Lỗi khi dán ảnh: ${e.message}`, 'error');
+          this.onStatus(`${prefix}: Lỗi khi upload ảnh: ${e.message}`, 'error');
+        } finally {
+          // Khôi phục clipboard về trạng thái ban đầu của người dùng
+          if (!savedClipboardImage.isEmpty()) {
+            clipboard.writeImage(savedClipboardImage);
+          } else if (savedClipboardText) {
+            clipboard.writeText(savedClipboardText);
+          } else {
+            clipboard.clear();
+          }
         }
       }
 
-      // 2. Paste Content
+      // 2. Nhập nội dung bài viết bằng CDP — không dùng OS clipboard
       if (content) {
-        this.onStatus(`${prefix}: Đang dán nội dung...`, 'running');
-        clipboard.clear();
-        clipboard.write({
-          text: content,
-          html: content.replace(/\r?\n/g, '<br/>')
-        });
-
+        this.onStatus(`${prefix}: Đang nhập nội dung bài viết...`, 'running');
         await composer.click();
-        await delay(1000);
+        await delay(800);
 
-        // Force focus again
-        await this.focus();
+        // Nếu đã có ảnh trong composer, di chuyển con trỏ xuống cuối trước khi nhập chữ
+        if (effectiveImagePath || post.imageBase64) {
+          await page.keyboard.press('End');
+          await delay(200);
+        }
 
-        await page.keyboard.down('Control');
-        await page.keyboard.press('KeyV');
-        await page.keyboard.up('Control');
+        // Dùng CDP Input.insertText — inject thẳng vào browser engine, không qua OS clipboard
+        const contentCdp = await page.target().createCDPSession();
+        await contentCdp.send('Input.insertText', { text: content });
+        await contentCdp.detach();
 
-        // If NO image, wait for Link Preview. If YES image, wait less.
-        if (!effectiveImagePath) {
+        // Nếu không có ảnh, chờ link preview Facebook render
+        if (!effectiveImagePath && !post.imageBase64) {
           await delay(6000);
         } else {
           await delay(3000);
@@ -604,6 +628,9 @@ class PostQueueController {
   }
 
   async _clickPostButton(page) {
+    const startedAt = Date.now();
+    let clickedPost = false;
+
     // 1. Try to click "Next" / "Tiếp" (New Fanpage Flow)
     const clickedNext = await page.evaluate(() => {
       const buttons = Array.from(document.querySelectorAll('div[role="button"], span[role="button"]'));
@@ -623,17 +650,22 @@ class PostQueueController {
     }
 
     // 2. Click "Post" / "Đăng"
-    const clickedPost = await page.evaluate(() => {
-      const buttons = Array.from(document.querySelectorAll('div[role="button"], span[role="button"]'));
-      for (const button of buttons) {
-        const text = (button.innerText || '').trim().toLowerCase();
-        if (text === 'post' || text === 'đăng') {
-          button.click();
-          return true;
+    while (Date.now() - startedAt < 10000) {
+      clickedPost = await page.evaluate(() => {
+        const buttons = Array.from(document.querySelectorAll('div[role="button"], span[role="button"]'));
+        for (const button of buttons) {
+          const text = (button.innerText || '').trim().toLowerCase();
+          if (text === 'post' || text === 'đăng') {
+            button.click();
+            return true;
+          }
         }
-      }
-      return false;
-    });
+        return false;
+      });
+
+      if (clickedPost) break;
+      await delay(1000);
+    }
 
     if (!clickedPost) {
       throw new Error(t('backend.errors.post_button'));
@@ -642,11 +674,11 @@ class PostQueueController {
     // 3. Handle annoying "Add WhatsApp button" or "Boost Post" popups
     await delay(3000);
     await page.evaluate(() => {
-      // Try clicking "Not now" / "Lúc khác"
+      // Try clicking "Not now" / "Lúc khác" / "Đăng bài viết gốc"
       const buttons = Array.from(document.querySelectorAll('button, div[role="button"], span[role="button"], a[role="button"]'));
       for (const button of buttons) {
         const text = (button.innerText || '').trim().toLowerCase();
-        if (text === 'not now' || text === 'lúc khác' || text === 'bỏ qua' || text === 'skip') {
+        if (text === 'not now' || text === 'lúc khác' || text === 'bỏ qua' || text === 'skip' || text === 'đăng bài viết gốc' || text === 'post original post') {
           button.click();
           return;
         }

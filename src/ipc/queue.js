@@ -14,6 +14,8 @@ function normalizeQueuePayload(payload = {}) {
         commentText: (post.commentText || '').trim(),
         imagePath: post.imagePath || '',
         imageBase64: post.imageBase64 || '',
+        enableSchedule: Boolean(post.enableSchedule),
+        scheduledTime: post.scheduledTime || '',
       })).filter((post) => post.content)
     : [];
 

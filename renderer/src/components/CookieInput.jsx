@@ -7,20 +7,36 @@ import { useTranslation } from 'react-i18next'
  * J2Team exports: array of { name, value, domain, path, ... }
  * App expects: JSON string `{ cookies: [...] }`
  */
-function parseJ2TeamCookies(rawText) {
-  const parsed = JSON.parse(rawText)
-
-  // J2Team trả về mảng trực tiếp
-  if (Array.isArray(parsed)) {
-    const isValid = parsed.length > 0 && parsed[0].name && parsed[0].value
-    if (!isValid) return null
-
-    return JSON.stringify({ cookies: parsed })
+function parsePastedCookies(rawText) {
+  rawText = rawText.trim();
+  
+  // 1. Check if JSON (J2Team or similar)
+  try {
+    const parsed = JSON.parse(rawText)
+    if (Array.isArray(parsed)) {
+      const isValid = parsed.length > 0 && parsed[0].name && parsed[0].value
+      if (isValid) return JSON.stringify({ cookies: parsed })
+    }
+    if (parsed.cookies && Array.isArray(parsed.cookies)) {
+      return JSON.stringify(parsed)
+    }
+  } catch (e) {
+    // Not JSON, continue to other formats
   }
 
-  // Trường hợp đã wrap sẵn `{ cookies: [...] }`
-  if (parsed.cookies && Array.isArray(parsed.cookies)) {
-    return JSON.stringify(parsed)
+  // 2. Check if delimited format (UID|Pass|2FA|Cookie|Token|...)
+  if (rawText.includes('|')) {
+    const parts = rawText.split('|');
+    // Tìm phần tử chứa cookie đặc trưng của Facebook
+    const cookiePart = parts.find(p => p.includes('c_user=') && p.includes('xs='));
+    if (cookiePart) {
+      return cookiePart; // Trả về dạng raw cookie string (backend đã hỗ trợ parse dạng c_user=...;)
+    }
+  }
+
+  // 3. Check if standard raw cookie string (c_user=...; xs=...)
+  if (rawText.includes('c_user=') && rawText.includes('xs=')) {
+    return rawText;
   }
 
   return null
@@ -33,7 +49,7 @@ function parseJ2TeamCookies(rawText) {
  *
  * @param {{ value: string, onChange: (v: string) => void, disabled: boolean, onError: (msg: string) => void }} props
  */
-export default function CookieInput({ value, onChange, disabled = false, onError }) {
+export default function CookieInput({ value, onChange, disabled = false, onError, profileId = null }) {
   const { t } = useTranslation()
   const [activeTab, setActiveTab] = useState('browser')
   const [pasteInput, setPasteInput] = useState('')
@@ -43,7 +59,7 @@ export default function CookieInput({ value, onChange, disabled = false, onError
     setIsExtracting(true)
     try {
       if (window.desktopApp) {
-        const cookieString = await window.desktopApp.startProfileLogin()
+        const cookieString = await window.desktopApp.startProfileLogin(profileId)
         if (cookieString) {
           onChange(cookieString)
         }
@@ -57,19 +73,15 @@ export default function CookieInput({ value, onChange, disabled = false, onError
     }
   }
 
-  const handlePasteJ2Team = () => {
+  const handlePasteCookie = () => {
     if (!pasteInput.trim()) return
 
-    try {
-      const converted = parseJ2TeamCookies(pasteInput.trim())
-      if (!converted) {
-        return onError?.(t('profiles.alerts.invalid_j2team_format'))
-      }
-      onChange(converted)
-      onError?.('')
-    } catch {
-      onError?.(t('profiles.alerts.invalid_j2team_format'))
+    const converted = parsePastedCookies(pasteInput)
+    if (!converted) {
+      return onError?.('Định dạng Cookie không hợp lệ. Hãy dán JSON J2Team, định dạng UID|Pass|...|Cookie, hoặc chuỗi Cookie cơ bản.');
     }
+    onChange(converted)
+    onError?.('')
   }
 
   const handleReset = () => {
@@ -141,11 +153,11 @@ export default function CookieInput({ value, onChange, disabled = false, onError
         </div>
       )}
 
-      {/* Paste J2Team tab */}
+      {/* Paste tab */}
       {activeTab === 'paste' && (
         <div className="space-y-3">
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            {t('profiles.modal.paste_instruction')}
+            Dán Cookie vào đây (hỗ trợ JSON J2Team, định dạng UID|Pass|...|Cookie|Token, hoặc chuỗi c_user=...;)
           </p>
           <textarea
             rows={6}
@@ -157,7 +169,7 @@ export default function CookieInput({ value, onChange, disabled = false, onError
           />
           {!value && pasteInput.trim() && (
             <button
-              onClick={handlePasteJ2Team}
+              onClick={handlePasteCookie}
               disabled={isBusy}
               className="btn-secondary w-full py-2.5 flex items-center justify-center gap-2 font-semibold text-blue-700 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 border-blue-200 dark:border-blue-800/50"
             >

@@ -20,6 +20,7 @@ export default function ProfileFormModal({
   isOpen,
   onClose,
   onSubmit,
+  profileId = null,
   profileName = '',
   onError,
 }) {
@@ -121,6 +122,7 @@ export default function ProfileFormModal({
             onChange={setCookie}
             disabled={isBusy}
             onError={onError}
+            profileId={profileId}
           />
         </div>
 

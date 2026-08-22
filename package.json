@@ -116,7 +116,8 @@
     "electron-updater": "^6.8.3",
     "puppeteer": "^24.11.2",
     "puppeteer-extra": "^3.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2"
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "totp-generator": "^2.0.1"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.3",

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../components/ThemeContext';
-import { Settings, Globe, Moon, Sun, Link } from 'lucide-react';
+import { Settings, Globe, Moon, Sun, Link, MessageCircle, Trash2, Plus } from 'lucide-react';
 
 export default function SettingsPage() {
   const { t, i18n } = useTranslation();
@@ -12,9 +12,17 @@ export default function SettingsPage() {
   const currentLang = i18n.resolvedLanguage || i18n.language || 'vi';
   const isEn = currentLang.startsWith('en');
 
+  const [ctaList, setCtaList] = useState([]);
+  const [newCta, setNewCta] = useState('');
+  const [ctaSaved, setCtaSaved] = useState(false);
+
   useEffect(() => {
     window.desktopApp.getTinfosConfig().then(cfg => {
       if (cfg && cfg.domain) setTinfosDomain(cfg.domain);
+    }).catch(() => {});
+
+    window.desktopApp.getCTAConfig().then(list => {
+      if (Array.isArray(list)) setCtaList(list);
     }).catch(() => {});
   }, []);
 
@@ -22,6 +30,22 @@ export default function SettingsPage() {
     await window.desktopApp.saveTinfosConfig({ domain: tinfosDomain });
     setDomainSaved(true);
     setTimeout(() => setDomainSaved(false), 2000);
+  };
+
+  const handleAddCta = () => {
+    if (!newCta.trim()) return;
+    setCtaList([...ctaList, newCta.trim()]);
+    setNewCta('');
+  };
+
+  const handleRemoveCta = (idx) => {
+    setCtaList(ctaList.filter((_, i) => i !== idx));
+  };
+
+  const handleSaveCta = async () => {
+    await window.desktopApp.saveCTAConfig(ctaList);
+    setCtaSaved(true);
+    setTimeout(() => setCtaSaved(false), 2000);
   };
 
   return (
@@ -148,6 +172,68 @@ export default function SettingsPage() {
               className="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white font-bold tracking-wide rounded-xl transition-colors text-sm shadow-sm"
             >
               Đăng Nhập Tinfos
+            </button>
+          </div>
+        </div>
+
+        {/* CTA Section */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-slate-800 space-y-4">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-rose-50 dark:bg-rose-900/40 rounded-xl text-rose-600 dark:text-rose-400">
+              <MessageCircle className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-800 dark:text-slate-200">Tiền tố Bình luận (CTAs)</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                Các câu gọi hành động chèn trước link bình luận ngẫu nhiên
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-2 mt-4">
+            {ctaList.map((cta, idx) => (
+              <div key={idx} className="flex items-center justify-between bg-slate-50 dark:bg-slate-800 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                <span className="text-sm text-slate-700 dark:text-slate-300 font-medium">{cta}</span>
+                <button
+                  onClick={() => handleRemoveCta(idx)}
+                  className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+            {ctaList.length === 0 && (
+              <div className="text-center p-4 text-sm text-slate-500 italic">Chưa có tiền tố nào. (Sẽ không ghép thêm chữ trước link)</div>
+            )}
+          </div>
+
+          <div className="flex gap-2 mt-4">
+            <input
+              type="text"
+              placeholder="Nhập câu tiền tố mới..."
+              value={newCta}
+              onChange={e => setNewCta(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleAddCta()}
+              className="flex-1 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-rose-500 outline-none"
+            />
+            <button
+              onClick={handleAddCta}
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-lg text-sm font-medium transition-colors flex flex-row items-center gap-2"
+            >
+              <Plus className="w-4 h-4" /> Thêm
+            </button>
+          </div>
+
+          <div className="flex justify-end pt-4 border-t border-slate-100 dark:border-slate-800 mt-4">
+            <button
+              onClick={handleSaveCta}
+              className={`px-6 py-2.5 font-bold tracking-wide rounded-xl transition-colors text-sm shadow-sm ${
+                ctaSaved
+                  ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-400'
+                  : 'bg-rose-600 hover:bg-rose-700 text-white'
+              }`}
+            >
+              {ctaSaved ? '✓ Đã lưu' : 'Lưu cấu hình CTA'}
             </button>
           </div>
         </div>

@@ -14,7 +14,7 @@ export default function TrelloImportModal({ isOpen, onClose, onImport, queueId }
   
   const [selectedBoard, setSelectedBoard] = useState('');
   const [selectedList, setSelectedList] = useState('');
-  const [selectedCard, setSelectedCard] = useState('');
+  const [selectedCards, setSelectedCards] = useState([]);
   
   const [loadingMsg, setLoadingMsg] = useState('');
 
@@ -33,7 +33,7 @@ export default function TrelloImportModal({ isOpen, onClose, onImport, queueId }
       });
     } else {
       // Reset state on close but keep boards/lists cache
-      setSelectedCard('');
+      setSelectedCards([]);
       setLoadingMsg('');
     }
   }, [isOpen, queueId]);
@@ -74,7 +74,7 @@ export default function TrelloImportModal({ isOpen, onClose, onImport, queueId }
   const handleBoardChange = async (boardId) => {
     setSelectedBoard(boardId);
     setSelectedList('');
-    setSelectedCard('');
+    setSelectedCards([]);
     setLists([]);
     setCards([]);
     
@@ -97,7 +97,7 @@ export default function TrelloImportModal({ isOpen, onClose, onImport, queueId }
 
   const handleListChange = async (listId) => {
     setSelectedList(listId);
-    setSelectedCard('');
+    setSelectedCards([]);
     setCards([]);
     
     if (listId) {
@@ -124,39 +124,51 @@ export default function TrelloImportModal({ isOpen, onClose, onImport, queueId }
   };
 
   const handleImport = async () => {
-    const card = cards.find(c => c.id === selectedCard);
-    if (!card) return alert('Vui lòng chọn 1 thẻ.');
+    if (selectedCards.length === 0) return alert('Vui lòng chọn ít nhất 1 thẻ.');
 
     setStep('loading');
+    const importedPosts = [];
     
     try {
-      const desc = card.desc || '';
-      const urlMatch = desc.match(/(https?:\/\/[^\s\n]+)/);
-      if (!urlMatch) {
-        throw new Error('Không tìm thấy link nào trong phần mô tả của thẻ Trello.');
+      const ctaList = await window.desktopApp.getCTAConfig();
+
+      for (let i = 0; i < selectedCards.length; i++) {
+        const cardId = selectedCards[i];
+        const card = cards.find(c => c.id === cardId);
+        if (!card) continue;
+
+        const desc = card.desc || '';
+        const urlMatch = desc.match(/(https?:\/\/[^\s\n]+)/);
+        if (!urlMatch) {
+          alert(`Bỏ qua thẻ "${card.name}": Không tìm thấy link nào trong phần mô tả.`);
+          continue;
+        }
+        
+        const originalLink = urlMatch[0];
+        const cleanedDesc = desc.replace(originalLink, '').trim();
+        const baseContent = cleanedDesc ? `${card.name}\n\n${cleanedDesc}` : card.name;
+
+        setLoadingMsg(`Thẻ ${i+1}/${selectedCards.length}: Đang mở trình duyệt lấy link Wrap (Tinfosmedia)... Vui lòng đợi...`);
+        
+        const wrappedLink = await window.desktopApp.wrapTinfosLink(originalLink);
+
+        setLoadingMsg(`Thẻ ${i+1}/${selectedCards.length}: Đang chuẩn bị nội dung...`);
+        const cta = ctaList.length > 0 ? ctaList[Math.floor(Math.random() * ctaList.length)] : "";
+        
+        setLoadingMsg(`Thẻ ${i+1}/${selectedCards.length}: Đang tải ảnh đính kèm từ Trello...`);
+        const imageResult = await window.desktopApp.downloadTrelloImage({ cardId: card.id, fileName: card.name });
+
+        importedPosts.push({
+          content: baseContent + '\n𝐅𝐮𝐥𝐥 𝐝𝐞𝐭𝐚𝐢𝐥𝐬 𝐯𝐢𝐚 🔗 𝐢𝐧 𝐜𝐨𝐦𝐦𝐞𝐧𝐭𝐬 👇',
+          commentText: `${cta} ${wrappedLink}`,
+          imagePath: imageResult?.filePath || '',
+          imageBase64: imageResult?.base64 || ''
+        });
       }
       
-      const originalLink = urlMatch[0];
-      const baseContent = card.name + '\n\n' + desc.replace(originalLink, '').trim();
-
-      setLoadingMsg('1/3 Đang mở trình duyệt lấy link Wrap (Tinfosmedia)... Vui lòng đợi...');
-      
-      const wrappedLink = await window.desktopApp.wrapTinfosLink(originalLink);
-
-      setLoadingMsg('2/3 Đang chuẩn bị nội dung...');
-      const ctaList = ["𝑾𝑨𝑻𝑪𝑯 👉", "𝑭𝒖𝒍𝒍 𝒔𝒕𝒐𝒓𝒚 👉", "𝑹𝒆𝒂𝒅 𝒎𝒐𝒓𝒆 👉", "𝑼𝒑𝒅𝒂𝒕𝒆 𝑵𝒆𝒘 𝑻𝒐𝒅𝒂𝒚👉"];
-      const cta = ctaList[Math.floor(Math.random() * ctaList.length)];
-      
-      setLoadingMsg('3/3 Đang tải ảnh đính kèm từ Trello...');
-      const imageResult = await window.desktopApp.downloadTrelloImage({ cardId: card.id, fileName: card.name });
-
-      onImport({
-        content: baseContent,
-        commentText: `${cta} ${wrappedLink}`,
-        imagePath: imageResult?.filePath || '',
-        imageBase64: imageResult?.base64 || ''
-      });
-      
+      if (importedPosts.length > 0) {
+        onImport(importedPosts);
+      }
       onClose();
     } catch (e) {
       alert('Lỗi Import: ' + e.message);
@@ -255,24 +267,47 @@ export default function TrelloImportModal({ isOpen, onClose, onImport, queueId }
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Thẻ bài viết (Cards)</label>
+                <div className="flex justify-between items-end mb-2">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Thẻ bài viết (Cards)</label>
+                  {cards.length > 0 && (
+                    <button 
+                      onClick={() => {
+                        if (selectedCards.length === cards.length) {
+                          setSelectedCards([]);
+                        } else {
+                          setSelectedCards(cards.map(c => c.id));
+                        }
+                      }}
+                      className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline"
+                    >
+                      {selectedCards.length === cards.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
+                    </button>
+                  )}
+                </div>
                 <div className="border border-slate-200 dark:border-slate-600 rounded-lg h-60 overflow-y-auto bg-slate-50 dark:bg-slate-900/50">
                   {cards.length === 0 ? (
                     <div className="p-4 text-center text-slate-400 text-sm italic mt-8">Chưa có dữ liệu. Vui lòng chọn List.</div>
                   ) : (
                     <ul className="divide-y divide-slate-200 dark:divide-slate-700/50">
-                      {cards.map(c => (
-                        <li 
-                          key={c.id} 
-                          className={`p-3 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors flex items-center ${selectedCard === c.id ? 'bg-blue-100 dark:bg-blue-900/40 border-l-4 border-blue-500' : 'border-l-4 border-transparent'}`}
-                          onClick={() => setSelectedCard(c.id)}
-                        >
-                          <div className={`w-4 h-4 rounded-full border flex-shrink-0 mr-3 flex items-center justify-center ${selectedCard === c.id ? 'border-blue-500 bg-blue-500' : 'border-slate-400'}`}>
-                            {selectedCard === c.id && <div className="w-2 h-2 rounded-full bg-white"></div>}
-                          </div>
-                          <span className="text-slate-800 dark:text-slate-200 text-sm font-medium truncate">{c.name}</span>
-                        </li>
-                      ))}
+                      {cards.map(c => {
+                        const isSelected = selectedCards.includes(c.id);
+                        return (
+                          <li 
+                            key={c.id} 
+                            className={`p-3 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors flex items-center ${isSelected ? 'bg-blue-100 dark:bg-blue-900/40 border-l-4 border-blue-500' : 'border-l-4 border-transparent'}`}
+                            onClick={() => {
+                              setSelectedCards(prev => 
+                                prev.includes(c.id) ? prev.filter(id => id !== c.id) : [...prev, c.id]
+                              );
+                            }}
+                          >
+                            <div className={`w-5 h-5 rounded-[6px] border flex-shrink-0 mr-3 flex items-center justify-center transition-colors text-[10px] font-bold ${isSelected ? 'border-blue-500 bg-blue-500 text-white' : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-transparent'}`}>
+                              {isSelected ? selectedCards.indexOf(c.id) + 1 : ''}
+                            </div>
+                            <span className="text-slate-800 dark:text-slate-200 text-sm font-medium truncate select-none">{c.name}</span>
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                 </div>
@@ -303,10 +338,10 @@ export default function TrelloImportModal({ isOpen, onClose, onImport, queueId }
           {step === 'browse' && (
             <button 
               onClick={handleImport}
-              disabled={!selectedCard}
-              className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors flex items-center shadow-sm ${!selectedCard ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+              disabled={selectedCards.length === 0}
+              className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors flex items-center shadow-sm ${selectedCards.length === 0 ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
             >
-              Tiến hành Nhập (Wrap Link)
+              Tiến hành Nhập {selectedCards.length > 0 ? `(${selectedCards.length})` : ''}
               <ArrowRight size={16} className="ml-2" />
             </button>
           )}
