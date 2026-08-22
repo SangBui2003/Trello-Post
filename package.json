@@ -10,7 +10,7 @@
     "build:ui": "cd renderer && npm run build",
     "start:debug": "electron . --enable-logging",
     "postinstall": "electron-rebuild -f -w better-sqlite3",
-    "build:app": "npm run build:ui && electron-packager . PostPilot --platform=win32 --arch=x64 --out=release --overwrite --icon=icon.ico --ignore=release",
+    "build:app": "npm run build:ui && electron-packager . PostPilot --platform=win32 --arch=x64 --out=release --overwrite --icon=icon.ico --ignore=\"^/release\"",
     "build": "npm run build:app",
     "dist:nsis": "npm run build:ui && npm run prebuild:electron && electron-builder --win --x64",
     "dist:publish": "dotenv -- npm run build:ui && dotenv -- npm run prebuild:electron && dotenv -- electron-builder --win --x64 --publish always",
