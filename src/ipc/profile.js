@@ -101,37 +101,48 @@ function register(ctx) {
     return await db.getProfilePages(profileId);
   });
 
-  ipcMain.handle('profile:update_token', async (_, { profileId, cookieString }) => {
+  ipcMain.handle('profile:update_token', async (_, { profileId, name, cookieString, metadata }) => {
     const profile = await db.getProfileById(profileId);
     if (!profile) {
       throw new Error('Profile does not exist.');
     }
 
-    await db.updateCookieString(profileId, cookieString);
-
-    // Đồng bộ (Sync) cookie mới vào trình duyệt đang mở (nếu có)
-    const active = runningBrowsers.get(profileId);
-    if (active && active.targetPage) {
-      try {
-        const cookies = parseCookieString(cookieString);
-        if (cookies.length > 0) {
-          await active.targetPage.setCookie(...cookies);
-          await active.targetPage.reload({ waitUntil: 'domcontentloaded' });
-          pushStatus(`Đã đồng bộ Cookie mới vào trình duyệt đang mở của ${profile.name}`, 'info');
-        }
-      } catch (e) {
-        console.error('Lỗi đồng bộ cookie vào trình duyệt đang mở:', e);
-      }
+    if (name) {
+      await db.updateProfileName(profileId, name);
     }
 
-    // Re-scan pages với token mới
-    pushStatus('Token updated. Rescanning Fanpages...', 'running');
-    try {
-      const pages = await scanPages(cookieString);
-      await db.updateProfilePages(profileId, pages);
-      pushStatus(`Token updated & scan complete: ${pages.length} Fanpages.`, 'success');
-    } catch (error) {
-      pushStatus(`Token updated but Fanpage scan failed: ${error.message}`, 'error');
+    if (cookieString || metadata) {
+      // If cookieString is empty but metadata exists, we pass profile.cookieString to keep the old cookie
+      await db.updateCookieString(profileId, cookieString || profile.cookieString, metadata);
+    }
+
+    if (cookieString) {
+      // Đồng bộ (Sync) cookie mới vào trình duyệt đang mở (nếu có)
+      const active = runningBrowsers.get(profileId);
+      if (active && active.targetPage) {
+        try {
+          const cookies = parseCookieString(cookieString);
+          if (cookies.length > 0) {
+            await active.targetPage.setCookie(...cookies);
+            await active.targetPage.reload({ waitUntil: 'domcontentloaded' });
+            pushStatus(`Đã đồng bộ Cookie mới vào trình duyệt đang mở của ${name || profile.name}`, 'info');
+          }
+        } catch (e) {
+          console.error('Lỗi đồng bộ cookie vào trình duyệt đang mở:', e);
+        }
+      }
+
+      // Re-scan pages với token mới
+      pushStatus('Token updated. Rescanning Fanpages...', 'running');
+      try {
+        const pages = await scanPages(cookieString);
+        await db.updateProfilePages(profileId, pages);
+        pushStatus(`Token updated & scan complete: ${pages.length} Fanpages.`, 'success');
+      } catch (error) {
+        pushStatus(`Token updated but Fanpage scan failed: ${error.message}`, 'error');
+      }
+    } else {
+      pushStatus('Profile updated.', 'success');
     }
 
     return true;
@@ -186,6 +197,108 @@ function register(ctx) {
       return true;
     } catch (error) {
       pushStatus(`Lỗi khi mở trình duyệt: ${error.message}`, 'error');
+      throw error;
+    }
+  });
+  ipcMain.handle('profile:export_excel', async (event, profileIds) => {
+    try {
+      const profiles = await db.getProfiles();
+      const exportData = profileIds 
+        ? profiles.filter(p => profileIds.includes(p.id))
+        : profiles;
+
+      if (exportData.length === 0) return null;
+
+      const { dialog } = require('electron');
+      const { filePath } = await dialog.showSaveDialog({
+        title: 'Lưu file Excel',
+        defaultPath: 'profiles_export.xlsx',
+        filters: [{ name: 'Excel Files', extensions: ['xlsx'] }]
+      });
+
+      if (!filePath) return null;
+
+      const XLSX = require('xlsx');
+      const dataToExport = exportData.map(p => {
+        return {
+          'Tên Profile': p.name,
+          'Danh mục': p.metadata?.category === 'adm' ? 'Admin' : p.metadata?.category === 'btv' ? 'BTV' : p.metadata?.category || '',
+          'UID': p.metadata?.uid || '',
+          'Mật khẩu': p.metadata?.password || '',
+          '2FA': p.metadata?.twofa || '',
+          'Email': p.metadata?.email || '',
+          'Pass Email': p.metadata?.emailPass || '',
+          'Cookie': p.metadata?.rawString || '',
+          'Số Fanpage': p.pages ? p.pages.length : 0,
+          'Ngày tạo': new Date(p.createdAt).toLocaleString('vi-VN')
+        };
+      });
+
+      const ws = XLSX.utils.json_to_sheet(dataToExport);
+      
+      // Auto adjust column widths
+      const wscols = Object.keys(dataToExport[0] || {}).map(key => ({ wch: Math.max(key.length, 15) }));
+      ws['!cols'] = wscols;
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Profiles');
+      XLSX.writeFile(wb, filePath);
+
+      return filePath;
+    } catch (error) {
+      console.error('Lỗi xuất Excel:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('profile:sync_sheets', async (event, { profileIds, webAppUrl }) => {
+    try {
+      const profiles = await db.getProfiles();
+      const exportData = profileIds 
+        ? profiles.filter(p => profileIds.includes(p.id))
+        : profiles;
+
+      if (exportData.length === 0) return { success: false, message: 'Không có dữ liệu để đồng bộ' };
+
+      const dataToExport = exportData.map(p => ({
+        name: p.name,
+        category: p.metadata?.category || '',
+        uid: p.metadata?.uid || '',
+        password: p.metadata?.password || '',
+        twofa: p.metadata?.twofa || '',
+        email: p.metadata?.email || '',
+        emailPass: p.metadata?.emailPass || '',
+        cookie: p.metadata?.rawString || '',
+        pagesCount: p.pages ? p.pages.length : 0,
+        createdAt: new Date(p.createdAt).toLocaleString('vi-VN')
+      }));
+
+      // In Electron Node process, we can use built-in fetch
+      const response = await fetch(webAppUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ profiles: dataToExport })
+      });
+
+      // Google Apps Script usually returns a 302 redirect for POST requests,
+      // but fetch() follows redirects automatically.
+      const resultText = await response.text();
+      let result = {};
+      try {
+        result = JSON.parse(resultText);
+      } catch {
+        result = { status: 'success', message: 'Đã gửi yêu cầu (không thể phân tích phản hồi JSON)' };
+      }
+
+      if (result.status === 'error') {
+        throw new Error(result.message || 'Lỗi không xác định từ Google Sheets');
+      }
+
+      return { success: true, message: result.message || 'Đồng bộ thành công' };
+    } catch (error) {
+      console.error('Lỗi đồng bộ Google Sheets:', error);
       throw error;
     }
   });

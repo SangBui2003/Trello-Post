@@ -31,7 +31,9 @@ contextBridge.exposeInMainWorld('desktopApp', {
   scanProfilePages: (profileId) => ipcRenderer.invoke('profile:scan_pages', profileId),
   getProfilePages: (profileId) => ipcRenderer.invoke('profile:get_pages', profileId),
   updatePageName: (profileId, pageId, newName) => ipcRenderer.invoke('profile:update_page_name', { profileId, pageId, newName }),
-  updateProfileToken: (profileId, cookieString) => ipcRenderer.invoke('profile:update_token', { profileId, cookieString }),
+  updateProfileToken: (profileId, name, cookieString, metadata) => ipcRenderer.invoke('profile:update_token', { profileId, name, cookieString, metadata }),
+  exportProfilesToExcel: (profileIds) => ipcRenderer.invoke('profile:export_excel', profileIds),
+  syncProfilesToSheets: (profileIds, webAppUrl) => ipcRenderer.invoke('profile:sync_sheets', { profileIds, webAppUrl }),
 
   getQueues: () => ipcRenderer.invoke('queue:list'),
   addQueue: (payload) => ipcRenderer.invoke('queue:add', payload),

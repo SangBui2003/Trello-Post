@@ -38,6 +38,7 @@ function mapProfileRow(row) {
     name: row.name,
     cookieString: row.cookie_string,
     pages: parseJson(row.pages, []),
+    metadata: parseJson(row.metadata, {}),
     createdAt: row.created_at,
   };
 }

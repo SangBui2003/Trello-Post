@@ -27,10 +27,36 @@ function parsePastedCookies(rawText) {
   // 2. Check if delimited format (UID|Pass|2FA|Cookie|Token|...)
   if (rawText.includes('|')) {
     const parts = rawText.split('|');
-    // Tìm phần tử chứa cookie đặc trưng của Facebook
-    const cookiePart = parts.find(p => p.includes('c_user=') && p.includes('xs='));
-    if (cookiePart) {
-      return cookiePart; // Trả về dạng raw cookie string (backend đã hỗ trợ parse dạng c_user=...;)
+    const cookieIndex = parts.findIndex(p => p.includes('c_user=') && p.includes('xs='));
+    
+    if (cookieIndex !== -1) {
+      // Find Token (starts with EAAA)
+      const token = parts.find(p => p.startsWith('EAAA')) || '';
+      
+      // Determine Email and EmailPass
+      // Email usually appears after the Cookie
+      let email = '';
+      let emailPass = '';
+      for (let i = cookieIndex + 1; i < parts.length; i++) {
+        if (parts[i].includes('@') && !parts[i].includes('EAAA')) {
+          email = parts[i];
+          if (i + 1 < parts.length) emailPass = parts[i + 1];
+          break;
+        }
+      }
+
+      return { 
+        cookieString: parts[cookieIndex],
+        metadata: {
+          uid: parts[0] !== parts[cookieIndex] ? parts[0].trim() : '',
+          password: parts.length > 1 && parts[1] !== parts[cookieIndex] ? parts[1].trim() : '',
+          twofa: parts.length > 2 && parts[2] !== parts[cookieIndex] ? parts[2].trim() : '',
+          token: token.trim(),
+          email: email.trim(),
+          emailPass: emailPass.trim(),
+          rawString: rawText // Store the original raw string just in case
+        }
+      };
     }
   }
 
@@ -49,7 +75,7 @@ function parsePastedCookies(rawText) {
  *
  * @param {{ value: string, onChange: (v: string) => void, disabled: boolean, onError: (msg: string) => void }} props
  */
-export default function CookieInput({ value, onChange, disabled = false, onError, profileId = null }) {
+export default function CookieInput({ value, onChange, onMetadataChange, disabled = false, onError, profileId = null }) {
   const { t } = useTranslation()
   const [activeTab, setActiveTab] = useState('browser')
   const [pasteInput, setPasteInput] = useState('')
@@ -80,7 +106,14 @@ export default function CookieInput({ value, onChange, disabled = false, onError
     if (!converted) {
       return onError?.('Định dạng Cookie không hợp lệ. Hãy dán JSON J2Team, định dạng UID|Pass|...|Cookie, hoặc chuỗi Cookie cơ bản.');
     }
-    onChange(converted)
+    
+    if (typeof converted === 'object' && converted.cookieString) {
+      onChange(converted.cookieString)
+      onMetadataChange?.(converted.metadata)
+    } else {
+      onChange(converted)
+      onMetadataChange?.({})
+    }
     onError?.('')
   }
 

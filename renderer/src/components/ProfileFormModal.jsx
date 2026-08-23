@@ -22,29 +22,32 @@ export default function ProfileFormModal({
   onSubmit,
   profileId = null,
   profileName = '',
+  initialMetadata = {},
   onError,
 }) {
   const { t } = useTranslation()
-  const [name, setName] = useState('')
+  const [name, setName] = useState(profileName)
   const [cookie, setCookie] = useState('')
+  const [metadata, setMetadata] = useState(initialMetadata)
   const [isBusy, setIsBusy] = useState(false)
 
   // Reset state mỗi khi modal mở — dùng key ở parent để remount
   const isCreate = mode === 'create'
 
   const handleSubmit = async () => {
-    if (isCreate && !name.trim()) {
+    if (!name.trim()) {
       return onError?.(t('profiles.alerts.missing_name'))
     }
-    if (!cookie.trim()) {
+    if (isCreate && !cookie.trim()) {
       return onError?.(t('profiles.alerts.missing_cookie'))
     }
 
     setIsBusy(true)
     try {
       await onSubmit({
-        ...(isCreate && { name: name.trim() }),
+        name: name.trim(),
         cookieString: cookie,
+        metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
       })
     } finally {
       setIsBusy(false)
@@ -68,7 +71,7 @@ export default function ProfileFormModal({
     ? t('profiles.modal.saving')
     : t('profiles.modal.updating')
 
-  const isSubmitDisabled = isBusy || !cookie || (isCreate && !name.trim())
+  const isSubmitDisabled = isBusy || (!cookie && isCreate) || !name.trim()
 
   if (!isOpen) return null
 
@@ -79,9 +82,6 @@ export default function ProfileFormModal({
         <div className="flex justify-between items-center p-5 border-b border-slate-100 dark:border-slate-800">
           <div>
             <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">{title}</h3>
-            {!isCreate && profileName && (
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{profileName}</p>
-            )}
           </div>
           <button
             onClick={handleClose}
@@ -94,36 +94,101 @@ export default function ProfileFormModal({
 
         {/* Body */}
         <div className="p-6 space-y-5 overflow-y-auto max-h-[70vh]">
-          {isCreate && (
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                {t('profiles.modal.profile_name')}
-              </label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder={t('profiles.modal.name_placeholder')}
-                disabled={isBusy}
-                className="input-field"
-                autoFocus
-              />
-            </div>
-          )}
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+              {t('profiles.modal.profile_name')}
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={t('profiles.modal.name_placeholder')}
+              disabled={isBusy}
+              className="input-field"
+              autoFocus={isCreate}
+            />
+          </div>
 
           {!isCreate && (
             <p className="text-sm text-slate-600 dark:text-slate-400">
-              {t('profiles.modal.update_instruction')}
+              Cập nhật lại Token nếu Cookie cũ bị hết hạn. Có thể bỏ trống nếu chỉ muốn sửa tên.
             </p>
           )}
 
           <CookieInput
             value={cookie}
             onChange={setCookie}
+            onMetadataChange={(m) => setMetadata(prev => ({ ...prev, ...m }))}
             disabled={isBusy}
             onError={onError}
             profileId={profileId}
           />
+
+          <div className="pt-2">
+            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
+              Thông tin đăng nhập bổ sung (Tùy chọn)
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <input
+                type="text"
+                placeholder="UID"
+                value={metadata.uid || ''}
+                onChange={e => setMetadata(prev => ({ ...prev, uid: e.target.value }))}
+                className="input-field text-sm py-2"
+                disabled={isBusy}
+              />
+              <input
+                type="text"
+                placeholder="Mật khẩu"
+                value={metadata.password || ''}
+                onChange={e => setMetadata(prev => ({ ...prev, password: e.target.value }))}
+                className="input-field text-sm py-2"
+                disabled={isBusy}
+              />
+              <input
+                type="text"
+                placeholder="2FA"
+                value={metadata.twofa || ''}
+                onChange={e => setMetadata(prev => ({ ...prev, twofa: e.target.value }))}
+                className="input-field text-sm py-2"
+                disabled={isBusy}
+              />
+              <input
+                type="text"
+                placeholder="Email"
+                value={metadata.email || ''}
+                onChange={e => setMetadata(prev => ({ ...prev, email: e.target.value }))}
+                className="input-field text-sm py-2"
+                disabled={isBusy}
+              />
+              <input
+                type="text"
+                placeholder="Mật khẩu Email"
+                value={metadata.emailPass || ''}
+                onChange={e => setMetadata(prev => ({ ...prev, emailPass: e.target.value }))}
+                className="input-field text-sm py-2"
+                disabled={isBusy}
+              />
+              <input
+                type="text"
+                placeholder="Cookie (Chuỗi đầy đủ)"
+                value={metadata.rawString || ''}
+                onChange={e => setMetadata(prev => ({ ...prev, rawString: e.target.value }))}
+                className="input-field text-sm py-2"
+                disabled={isBusy}
+              />
+              <select
+                value={metadata.category || ''}
+                onChange={e => setMetadata(prev => ({ ...prev, category: e.target.value }))}
+                className="input-field text-sm py-2"
+                disabled={isBusy}
+              >
+                <option value="">Chọn danh mục (Trống)</option>
+                <option value="adm">Admin</option>
+                <option value="btv">BTV</option>
+              </select>
+            </div>
+          </div>
         </div>
 
         {/* Footer */}

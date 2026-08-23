@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import {
   Plus, Trash2, X, RefreshCw, KeyRound,
-  ChevronDown, ChevronUp, ExternalLink, Edit2, Check, Globe, GripVertical
+  ChevronDown, ChevronUp, ExternalLink, Edit2, Check, Globe, GripVertical, Info, Download, CloudUpload, Settings
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import ProfileFormModal from '../components/ProfileFormModal'
+import GoogleSheetSettingsModal from '../components/GoogleSheetSettingsModal'
 
 export default function ProfileManagerPage() {
   const { t } = useTranslation()
@@ -12,6 +13,7 @@ export default function ProfileManagerPage() {
   const [busy, setBusy] = useState(false)
   const [expandedProfileId, setExpandedProfileId] = useState(null)
   const [scanningProfileId, setScanningProfileId] = useState(null)
+  const [selectedCategory, setSelectedCategory] = useState('')
 
   // Editing page name states
   const [editingPageId, setEditingPageId] = useState(null)
@@ -26,6 +28,7 @@ export default function ProfileManagerPage() {
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false)
   const [updateProfileId, setUpdateProfileId] = useState(null)
   const [updateProfileName, setUpdateProfileName] = useState('')
+  const [updateProfileMetadata, setUpdateProfileMetadata] = useState({})
   
   const [profileOrder, setProfileOrder] = useState(() => {
     try { return JSON.parse(localStorage.getItem('profileOrder') || '[]') } catch { return [] }
@@ -60,7 +63,10 @@ export default function ProfileManagerPage() {
   }, [])
 
   const sortedProfiles = React.useMemo(() => {
-    const sorted = [...profiles]
+    let sorted = [...profiles]
+    if (selectedCategory) {
+      sorted = sorted.filter(p => p.metadata?.category === selectedCategory)
+    }
     sorted.sort((a, b) => {
       const idxA = profileOrder.indexOf(a.id)
       const idxB = profileOrder.indexOf(b.id)
@@ -70,7 +76,7 @@ export default function ProfileManagerPage() {
       return 0
     })
     return sorted
-  }, [profiles, profileOrder])
+  }, [profiles, profileOrder, selectedCategory])
 
   const handleDragStart = (e, id) => {
     setDraggedId(id)
@@ -115,11 +121,11 @@ export default function ProfileManagerPage() {
     setIsAddModalOpen(true)
   }
 
-  const handleCreateProfile = async ({ name, cookieString }) => {
+  const handleCreateProfile = async ({ name, cookieString, metadata }) => {
     if (!window.desktopApp) return
 
     try {
-      await window.desktopApp.saveProfile({ name, cookieString })
+      await window.desktopApp.saveProfile({ name, cookieString, metadata })
       await loadProfiles()
       setIsAddModalOpen(false)
     } catch (err) {
@@ -128,22 +134,25 @@ export default function ProfileManagerPage() {
   }
 
   // --- Update token ---
-  const openUpdateModal = (profileId, profileName) => {
+  const openUpdateModal = (profileId, profileName, metadata) => {
     setUpdateProfileId(profileId)
     setUpdateProfileName(profileName)
+    setUpdateProfileMetadata(metadata || {})
     setUpdateModalKey((k) => k + 1)
     setIsUpdateModalOpen(true)
   }
 
-  const handleUpdateToken = async ({ cookieString }) => {
-    if (!window.desktopApp) return
+  const handleUpdateToken = async ({ name, cookieString, metadata }) => {
+    setBusy(true)
 
     try {
-      await window.desktopApp.updateProfileToken(updateProfileId, cookieString)
+      await window.desktopApp.updateProfileToken(updateProfileId, name, cookieString, metadata)
       await loadProfiles()
       setIsUpdateModalOpen(false)
     } catch (err) {
       setErrorStatus(t('profiles.alerts.token_update_error') + err.message)
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -224,6 +233,54 @@ export default function ProfileManagerPage() {
     }
   }
 
+  const handleExportExcel = async () => {
+    if (!window.desktopApp) return;
+    setBusy(true);
+    try {
+      const profileIds = sortedProfiles.map(p => p.id);
+      const filePath = await window.desktopApp.exportProfilesToExcel(profileIds);
+      if (filePath) {
+        setErrorStatus(`Đã xuất file Excel thành công: ${filePath}`);
+        setTimeout(() => setErrorStatus(''), 5000);
+      }
+    } catch (error) {
+      setErrorStatus(`Lỗi khi xuất Excel: ${error.message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const [isSheetModalOpen, setIsSheetModalOpen] = useState(false)
+
+  const handleSyncSheets = async () => {
+    const webAppUrl = localStorage.getItem('googleSheetUrl')
+    if (!webAppUrl) {
+      setIsSheetModalOpen(true)
+      return
+    }
+
+    if (!window.desktopApp) return;
+    setBusy(true);
+    try {
+      const profileIds = sortedProfiles.map(p => p.id);
+      const res = await window.desktopApp.syncProfilesToSheets(profileIds, webAppUrl);
+      if (res.success) {
+        setErrorStatus(`Đồng bộ thành công: ${res.message}`);
+        setTimeout(() => setErrorStatus(''), 5000);
+      } else {
+        setErrorStatus(`Lỗi đồng bộ: ${res.message}`);
+      }
+    } catch (error) {
+      if (error.message.includes('fetch')) {
+        setErrorStatus('Lỗi mạng hoặc URL Web App không hợp lệ. Vui lòng kiểm tra lại cấu hình.');
+      } else {
+        setErrorStatus(`Lỗi khi đồng bộ Google Sheets: ${error.message}`);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="relative h-full flex flex-col">
       <div className="flex justify-between items-center mb-6">
@@ -237,15 +294,54 @@ export default function ProfileManagerPage() {
             <button onClick={() => setErrorStatus('')} className="text-red-400 hover:text-red-600 dark:hover:text-red-300">✕</button>
           </div>
         )}
-        <button
-          onClick={openAddModal}
-          disabled={busy}
-          className="btn-primary flex items-center gap-2"
-        >
-          <Plus className="w-5 h-5" />
-          {t('profiles.buttons.add_profile')}
-        </button>
-      </div>
+          <div className="flex gap-3 items-center">
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="input-field max-w-[200px] text-sm py-2"
+            >
+              <option value="">Tất cả danh mục</option>
+              <option value="adm">Admin</option>
+              <option value="btv">BTV</option>
+            </select>
+            <button
+              onClick={handleExportExcel}
+              disabled={busy || sortedProfiles.length === 0}
+              className="btn-secondary flex items-center gap-2"
+              title="Xuất danh sách ra Excel"
+            >
+              <Download className="w-5 h-5" />
+              Xuất Excel
+            </button>
+            <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
+              <button
+                onClick={handleSyncSheets}
+                disabled={busy || sortedProfiles.length === 0}
+                className="px-3 py-1.5 text-sm font-medium text-emerald-600 dark:text-emerald-400 hover:bg-white dark:hover:bg-slate-700 rounded flex items-center gap-2 transition-colors disabled:opacity-50"
+                title="Đồng bộ danh sách lên Google Sheets"
+              >
+                <CloudUpload className="w-4 h-4" />
+                Đồng bộ Sheet
+              </button>
+              <button
+                onClick={() => setIsSheetModalOpen(true)}
+                disabled={busy}
+                className="px-2 py-1.5 text-slate-500 hover:text-slate-700 hover:bg-white dark:hover:bg-slate-700 rounded transition-colors"
+                title="Cấu hình Google Sheets"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
+            </div>
+            <button
+              onClick={openAddModal}
+              disabled={busy}
+              className="btn-primary flex items-center gap-2"
+            >
+              <Plus className="w-5 h-5" />
+              {t('profiles.buttons.add_profile')}
+            </button>
+          </div>
+        </div>
 
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 flex-1 overflow-auto transition-colors">
         <table className="w-full text-left border-collapse">
@@ -267,11 +363,12 @@ export default function ProfileManagerPage() {
                 const pageCount = p.pages?.length || 0
                 const isExpanded = expandedProfileId === p.id
                 const isScanning = scanningProfileId === p.id
+                const hasMetadata = p.metadata && (p.metadata.uid || p.metadata.password || p.metadata.twofa || p.metadata.email || p.metadata.emailPass || p.metadata.rawString || p.metadata.category)
 
                 return (
                   <React.Fragment key={p.id}>
                     <tr 
-                      className={`hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors group/row ${draggedId === p.id ? 'opacity-50' : ''}`}
+                      className={`hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-colors group/row cursor-pointer ${draggedId === p.id ? 'opacity-50' : ''}`}
                       draggable
                       onDragStart={(e) => handleDragStart(e, p.id)}
                       onDragEnd={handleDragEnd}
@@ -291,12 +388,12 @@ export default function ProfileManagerPage() {
                         })}
                       </td>
                       <td className="py-4 px-6 text-center">
-                        {pageCount > 0 ? (
+                        {(pageCount > 0 || hasMetadata) ? (
                           <button
                             onClick={() => toggleExpand(p.id)}
                             className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-sm font-semibold hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
                           >
-                            {pageCount}
+                            {pageCount > 0 ? pageCount : <Info className="w-4 h-4" />}
                             {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                           </button>
                         ) : (
@@ -314,7 +411,7 @@ export default function ProfileManagerPage() {
                             <Globe className="w-4.5 h-4.5" />
                           </button>
                           <button
-                            onClick={() => openUpdateModal(p.id, p.name)}
+                            onClick={() => openUpdateModal(p.id, p.name, p.metadata)}
                             disabled={busy}
                             className="p-2 text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-lg transition-colors"
                             title={t('profiles.tooltips.update_token')}
@@ -342,11 +439,47 @@ export default function ProfileManagerPage() {
                     </tr>
 
                     {/* Expanded Pages Row */}
-                    {isExpanded && pageCount > 0 && (
+                    {isExpanded && (pageCount > 0 || hasMetadata) && (
                       <tr>
-                        <td colSpan="4" className="bg-slate-50/70 dark:bg-slate-800/30 px-6 py-3">
-                          <div className="ml-4 space-y-2">
-                            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">{t('profiles.labels.fanpage_list')}</p>
+                        <td colSpan="4" className="bg-slate-50/70 dark:bg-slate-800/30 px-6 py-4">
+                          <div className="ml-4 space-y-4">
+                            {hasMetadata && (
+                              <div>
+                                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Thông tin tài khoản</p>
+                                <div className="flex gap-4 items-center flex-wrap bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-100 dark:border-slate-700">
+                                  {p.metadata.uid && (
+                                    <div className="text-sm"><span className="text-slate-500 dark:text-slate-400">UID: </span><span className="font-medium text-slate-800 dark:text-slate-200">{p.metadata.uid}</span></div>
+                                  )}
+                                  {p.metadata.password && (
+                                    <div className="text-sm"><span className="text-slate-500 dark:text-slate-400">Pass: </span><span className="font-medium text-slate-800 dark:text-slate-200">{p.metadata.password}</span></div>
+                                  )}
+                                  {p.metadata.twofa && (
+                                    <div className="text-sm"><span className="text-slate-500 dark:text-slate-400">2FA: </span><span className="font-medium text-slate-800 dark:text-slate-200">{p.metadata.twofa}</span></div>
+                                  )}
+                                  {p.metadata.email && (
+                                    <div className="text-sm"><span className="text-slate-500 dark:text-slate-400">Email: </span><span className="font-medium text-slate-800 dark:text-slate-200">{p.metadata.email}</span></div>
+                                  )}
+                                  {p.metadata.emailPass && (
+                                    <div className="text-sm"><span className="text-slate-500 dark:text-slate-400">MK Email: </span><span className="font-medium text-slate-800 dark:text-slate-200">{p.metadata.emailPass}</span></div>
+                                  )}
+                                  {p.metadata.rawString && (
+                                    <div className="text-sm truncate" title={p.metadata.rawString}><span className="text-slate-500 dark:text-slate-400">Cookie: </span><span className="font-medium text-slate-800 dark:text-slate-200 truncate">{p.metadata.rawString.substring(0, 30)}...</span></div>
+                                  )}
+                                  {p.metadata.category && (
+                                    <div className="text-sm">
+                                      <span className="text-slate-500 dark:text-slate-400">Danh mục: </span>
+                                      <span className="font-medium text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-md">
+                                        {p.metadata.category === 'adm' ? 'Admin' : p.metadata.category === 'btv' ? 'BTV' : p.metadata.category}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {pageCount > 0 && (
+                              <div>
+                                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">{t('profiles.labels.fanpage_list')}</p>
                             {p.pages.map((pg) => {
                               const isEditing = editingPageId === pg.id;
                               return (
@@ -405,6 +538,8 @@ export default function ProfileManagerPage() {
                                 </div>
                               )
                             })}
+                              </div>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -429,14 +564,19 @@ export default function ProfileManagerPage() {
 
       {/* Update Token Modal */}
       <ProfileFormModal
-        key={updateModalKey}
+        key={`update-${updateModalKey}`}
         mode="update"
         isOpen={isUpdateModalOpen}
         onClose={() => setIsUpdateModalOpen(false)}
         onSubmit={handleUpdateToken}
         profileId={updateProfileId}
         profileName={updateProfileName}
+        initialMetadata={updateProfileMetadata}
         onError={setErrorStatus}
+      />
+      <GoogleSheetSettingsModal
+        isOpen={isSheetModalOpen}
+        onClose={() => setIsSheetModalOpen(false)}
       />
     </div>
   )

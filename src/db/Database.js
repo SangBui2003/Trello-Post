@@ -58,9 +58,10 @@ class Database {
     this._sqlite.exec(SCHEMA_SQL);
     try {
       this._sqlite.exec('ALTER TABLE queues ADD COLUMN enable_timer INTEGER DEFAULT 1');
-    } catch (e) {
-      // Column may already exist
-    }
+    } catch (e) {}
+    try {
+      this._sqlite.exec('ALTER TABLE profiles ADD COLUMN metadata TEXT DEFAULT \'{}\'');
+    } catch (e) {}
   }
 
   /**

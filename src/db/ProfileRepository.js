@@ -9,11 +9,13 @@ class ProfileRepository {
       getAll: db.prepare('SELECT * FROM profiles'),
       getById: db.prepare('SELECT * FROM profiles WHERE id = ?'),
       insert: db.prepare(
-        'INSERT INTO profiles (id, name, cookie_string, pages, created_at) VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO profiles (id, name, cookie_string, pages, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?)',
       ),
       delete: db.prepare('DELETE FROM profiles WHERE id = ?'),
       updatePages: db.prepare('UPDATE profiles SET pages = ? WHERE id = ?'),
       updateCookieString: db.prepare('UPDATE profiles SET cookie_string = ? WHERE id = ?'),
+      updateCookieAndMetadata: db.prepare('UPDATE profiles SET cookie_string = ?, metadata = ? WHERE id = ?'),
+      updateName: db.prepare('UPDATE profiles SET name = ? WHERE id = ?'),
     };
   }
 
@@ -34,6 +36,7 @@ class ProfileRepository {
       profile.name || '',
       profile.cookieString || '',
       JSON.stringify(profile.pages || []),
+      JSON.stringify(profile.metadata || {}),
       createdAt,
     );
 
@@ -42,6 +45,7 @@ class ProfileRepository {
       name: profile.name || '',
       cookieString: profile.cookieString || '',
       pages: profile.pages || [],
+      metadata: profile.metadata || {},
       createdAt,
     };
   }
@@ -85,11 +89,24 @@ class ProfileRepository {
     return true;
   }
 
-  async updateCookieString(profileId, cookieString) {
+  async updateCookieString(profileId, cookieString, metadata = null) {
     const row = this._stmts.getById.get(profileId);
     if (!row) return false;
 
-    this._stmts.updateCookieString.run(cookieString, profileId);
+    if (metadata) {
+      const merged = { ...parseJson(row.metadata, {}), ...metadata };
+      this._stmts.updateCookieAndMetadata.run(cookieString, JSON.stringify(merged), profileId);
+    } else {
+      this._stmts.updateCookieString.run(cookieString, profileId);
+    }
+    return true;
+  }
+
+  async updateProfileName(profileId, name) {
+    const row = this._stmts.getById.get(profileId);
+    if (!row) return false;
+
+    this._stmts.updateName.run(name, profileId);
     return true;
   }
 }

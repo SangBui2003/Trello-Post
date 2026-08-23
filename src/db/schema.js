@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   name TEXT,
   cookie_string TEXT,
   pages TEXT DEFAULT '[]',
+  metadata TEXT DEFAULT '{}',
   created_at TEXT
 );
 

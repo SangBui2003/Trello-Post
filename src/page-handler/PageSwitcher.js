@@ -21,6 +21,12 @@ class PageSwitcher {
     const preClickUrl = page.url();
     const preClickCookies = await this._getIdentityCookies(page);
 
+    // Early check: if we are already using a Page identity, we can skip switching
+    if (preClickCookies.iUser && preClickCookies.iUser !== preClickCookies.cUser) {
+      onStatus(t('backend.status.already_fanpage') + ' (Early Cookie Check)', 'success');
+      return true;
+    }
+
     // 3. Click main "Switch" button
     onStatus(t('backend.status.searching_switch_btn'));
     const mainBtnHandle = await this._findButtonHandle(page, ['chuyển', 'switch', 'chuyển ngay', 'switch now']);
@@ -74,13 +80,28 @@ class PageSwitcher {
     // 5. Fallback: check if already using Page identity
     onStatus(t('backend.status.checking_actual_identity'));
     const isAlreadyPage = await page.evaluate(() => {
+      // 1. Check for composer elements
       const composer = document.querySelector('div[aria-label="Tạo bài viết"], div[aria-label="Create post"]');
-      const manageLink = document.querySelector('a[href*="/meta_business_suite"]');
-      return !!composer || !!manageLink;
+      // 2. Check for manage/professional dashboard links
+      const manageLink = document.querySelector('a[href*="/meta_business_suite"], a[href*="/professional_dashboard"]');
+      // 3. Check for specific page identity icons/buttons (like manage page)
+      const manageBtn = Array.from(document.querySelectorAll('div[role="button"], span[dir="auto"]')).find(el => {
+        const text = (el.innerText || '').toLowerCase();
+        return text.includes('quản lý') || text.includes('manage') || text.includes('xem công cụ') || text.includes('view tools');
+      });
+      // 4. If we are on a group page (sometimes it redirects), check if acting as page is allowed.
+      return !!composer || !!manageLink || !!manageBtn;
     });
 
     if (isAlreadyPage) {
       onStatus(t('backend.status.already_fanpage'), 'success');
+      return true;
+    }
+
+    // 6. Check identity cookies directly
+    const currentCookies = await this._getIdentityCookies(page);
+    if (currentCookies.iUser && currentCookies.iUser !== currentCookies.cUser) {
+      onStatus(t('backend.status.already_fanpage') + ' (Cookie check)', 'success');
       return true;
     }
 
