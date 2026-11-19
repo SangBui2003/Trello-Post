@@ -35,13 +35,17 @@ class TrelloManager {
     return this._get(`/boards/${boardId}/lists`);
   }
 
-  async getCards(listId, maxAgeDays = 2) {
+  async getCards(listId, maxAgeDays = 2, excludedCardIds = []) {
     const cards = await this._get(`/lists/${listId}/cards?attachments=true`);
     if (!Array.isArray(cards)) return [];
-    if (!maxAgeDays || maxAgeDays <= 0) return cards;
+
+    // Only return Trello cards that have not already been imported into this queue.
+    const excluded = new Set(Array.isArray(excludedCardIds) ? excludedCardIds.map(String) : []);
+    const newCards = cards.filter(card => card && !excluded.has(String(card.id)));
+    if (!maxAgeDays || maxAgeDays <= 0) return newCards;
 
     const cutoffMs = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
-    return cards.filter((card) => {
+    return newCards.filter((card) => {
       const idHex = card?.id ? String(card.id).slice(0, 8) : '';
       const createdMs = idHex.length === 8 ? parseInt(idHex, 16) * 1000 : 0;
       const activityMs = card?.dateLastActivity ? Date.parse(card.dateLastActivity) : 0;

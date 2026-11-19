@@ -88,6 +88,29 @@ const EMPTY_POST = {
   delayMinutes: 30,
 }
 
+// Use Trello's stable card ID to skip cards that already exist in a queue.
+function getQueuedTrelloCardIds(posts = []) {
+  return [...new Set((posts || []).map(post => post?.trelloCardId).filter(Boolean).map(String))]
+}
+
+function getNewTrelloPosts(importedPosts = [], existingPosts = []) {
+  const knownIds = new Set(getQueuedTrelloCardIds(existingPosts))
+  return (importedPosts || []).filter(post => {
+    const id = post?.trelloCardId ? String(post.trelloCardId) : ''
+    if (!id || knownIds.has(id)) return false
+    knownIds.add(id)
+    return true
+  }).map(post => ({ ...post, selected: false }))
+}
+
+function appendNewTrelloPosts(existingPosts = [], importedPosts = []) {
+  const newPosts = getNewTrelloPosts(importedPosts, existingPosts)
+  if (newPosts.length === 0) return [...existingPosts]
+  const isSingleEmptyPost = existingPosts.length === 1 &&
+    !existingPosts[0].content && !existingPosts[0].imagePath && !existingPosts[0].trelloCardId
+  return [...(isSingleEmptyPost ? [] : existingPosts), ...newPosts]
+}
+
 const EMPTY_FORM = {
   name: '',
   profileId: '',
@@ -696,6 +719,10 @@ export default function PostQueuePage() {
 
   const handleQuickSyncQueue = async (queue) => {
     if (!hasDesktopBridge) return
+    if (runningIds.includes(queue.id)) {
+      setErrorStatus('Không thể đồng bộ Trello khi hàng đợi đang chạy.')
+      return
+    }
     setErrorStatus('')
     setSaving(true)
     try {
@@ -710,21 +737,25 @@ export default function PostQueuePage() {
         return
       }
 
-      const rawPosts = await window.desktopApp.syncTrelloCards({ listId, autoWrapLink: true })
-      if (!rawPosts || rawPosts.length === 0) {
-        alert(`Không tìm thấy thẻ bài viết nào trong danh sách Trello đã liên kết của "${queue.name}".`)
+      // Fetch the latest persisted queue so existing posts and schedule state are retained.
+      const currentQueue = (await window.desktopApp.getQueues()).find(q => q.id === queue.id)
+      if (!currentQueue) throw new Error('Không tìm thấy hàng đợi.')
+      const rawPosts = await window.desktopApp.syncTrelloCards({
+        listId, autoWrapLink: true,
+        excludedCardIds: getQueuedTrelloCardIds(currentQueue.posts)
+      })
+      const newPosts = getNewTrelloPosts(rawPosts, currentQueue.posts)
+      if (newPosts.length === 0) {
+        alert(`Hàng đợi "${queue.name}" đã có tất cả các thẻ Trello hiện tại. Không có bài viết mới.`)
         return
       }
-      const posts = rawPosts.map((p) => ({ ...p, selected: false }))
-
       await window.desktopApp.updateQueue(queue.id, {
-        ...queue,
-        posts,
-        trelloListId: listId,
-        state: { currentPostIndex: 0, status: 'idle' }
+        ...currentQueue,
+        posts: appendNewTrelloPosts(currentQueue.posts, newPosts),
+        trelloListId: listId
       })
       await loadData(true)
-      alert(`Đã liên kết và nạp trực tiếp ${posts.length} bài viết từ Trello vào hàng đợi "${queue.name}" thành công!\n(Chưa chọn sẵn bài viết nào — hãy bấm Chỉnh sửa hàng đợi để tích chọn bài muốn đăng)`)
+      alert(`Đã thêm ${newPosts.length} bài viết mới từ Trello vào cuối hàng đợi "${queue.name}". Các bài cũ và lịch đăng được giữ nguyên.`)
     } catch (err) {
       console.error('Trello quick sync error:', err)
       setErrorStatus(`Lỗi đồng bộ Trello cho "${queue.name}": ${extractErrorMessage(err)}`)
@@ -772,17 +803,24 @@ export default function PostQueuePage() {
         }
 
         try {
-          const rawPosts = await window.desktopApp.syncTrelloCards({ listId, autoWrapLink: true })
-          const posts = Array.isArray(rawPosts) ? rawPosts.map((p) => ({ ...p, selected: false })) : []
-
+          const currentQueue = (await window.desktopApp.getQueues()).find(item => item.id === q.id)
+          if (!currentQueue) throw new Error('Không tìm thấy hàng đợi.')
+          const rawPosts = await window.desktopApp.syncTrelloCards({
+            listId, autoWrapLink: true,
+            excludedCardIds: getQueuedTrelloCardIds(currentQueue.posts)
+          })
+          const newPosts = getNewTrelloPosts(rawPosts, currentQueue.posts)
+          if (newPosts.length === 0) {
+            skippedCount++
+            continue
+          }
           await window.desktopApp.updateQueue(q.id, {
-            ...q,
-            posts,
-            trelloListId: listId,
-            state: { currentPostIndex: 0, status: 'idle' }
+            ...currentQueue,
+            posts: appendNewTrelloPosts(currentQueue.posts, newPosts),
+            trelloListId: listId
           })
           successCount++
-          totalCardsSynced += posts.length
+          totalCardsSynced += newPosts.length
         } catch (err) {
           console.error(`Lỗi đồng bộ Trello cho "${q.name}":`, err)
           errors.push(`${q.name}: ${err.message || err}`)
@@ -793,7 +831,7 @@ export default function PostQueuePage() {
 
       let resultMsg = `Hoàn tất cập nhật Trello cho toàn bộ hàng đợi/profile:\n- Thành công: ${successCount} hàng đợi (${totalCardsSynced} bài viết nạp mới)\n`
       if (skippedCount > 0) {
-        resultMsg += `- Bỏ qua: ${skippedCount} hàng đợi (chưa liên kết Trello hoặc đang chạy)\n`
+        resultMsg += `- Bỏ qua: ${skippedCount} hàng đợi (không có bài mới, chưa liên kết Trello hoặc đang chạy)\n`
       }
       if (errors.length > 0) {
         resultMsg += `- Lỗi: ${errors.length} hàng đợi:\n  + ${errors.slice(0, 3).join('\n  +')}`
@@ -823,20 +861,21 @@ export default function PostQueuePage() {
 
     setSaving(true)
     try {
-      const rawPosts = await window.desktopApp.syncTrelloCards({ listId, autoWrapLink: true })
-      if (!rawPosts || rawPosts.length === 0) {
-        alert('Không tìm thấy thẻ bài viết nào trong danh sách Trello đã liên kết.')
+      const rawPosts = await window.desktopApp.syncTrelloCards({
+        listId, autoWrapLink: true,
+        excludedCardIds: getQueuedTrelloCardIds(form.posts)
+      })
+      const newPosts = getNewTrelloPosts(rawPosts, form.posts)
+      if (newPosts.length === 0) {
+        alert('Không có bài viết Trello mới để thêm. Các bài trong hàng đợi được giữ nguyên.')
         return
       }
-      const newPosts = rawPosts.map((p) => ({ ...p, selected: false }))
-      setForm(prev => {
-        const existing = [...prev.posts]
-        if (existing.length === 1 && !existing[0].content && !existing[0].imagePath && !existing[0].trelloCardId) {
-          return { ...prev, posts: newPosts, trelloListId: listId }
-        }
-        return { ...prev, posts: [...newPosts, ...existing], trelloListId: listId }
-      })
-      alert(`Đã nạp trực tiếp ${newPosts.length} bài viết từ Trello vào hàng đợi!\n(Hãy tích chọn các bài viết bạn muốn đăng)`)
+      setForm(prev => ({
+        ...prev,
+        posts: appendNewTrelloPosts(prev.posts, newPosts),
+        trelloListId: listId
+      }))
+      alert(`Đã thêm ${newPosts.length} bài viết mới từ Trello vào cuối hàng đợi!\n(Hãy tích chọn các bài viết bạn muốn đăng)`)
     } catch (err) {
       console.error('Trello modal sync error:', err)
       setErrorStatus(`Lỗi nạp Trello: ${extractErrorMessage(err)}`)
@@ -1512,7 +1551,7 @@ export default function PostQueuePage() {
                          )}
                        </div>
                        <div className="flex items-center gap-3 flex-wrap">
-                         <button type="button" onClick={handleQuickSyncCurrentQueue} disabled={saving} className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 text-xs font-black uppercase tracking-tight flex items-center gap-1.5 transition-colors cursor-pointer" title="Lấy ngay toàn bộ thẻ từ danh sách Trello đã liên kết">
+                         <button type="button" onClick={handleQuickSyncCurrentQueue} disabled={saving} className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 text-xs font-black uppercase tracking-tight flex items-center gap-1.5 transition-colors cursor-pointer" title="Chỉ thêm các thẻ Trello chưa có trong hàng đợi">
                            <Zap size={14} className="fill-current" />
                            Đồng bộ Trello (Tức thì)
                          </button>
@@ -2063,27 +2102,14 @@ export default function PostQueuePage() {
         isOpen={isTrelloModalOpen}
         onClose={() => setIsTrelloModalOpen(false)}
         queueId={editingQueue ? editingQueue.id : 'new'}
+        existingCardIds={getQueuedTrelloCardIds(form.posts)}
         onImport={(dataArray, extraInfo) => {
-          setForm(prev => {
-            const newPosts = [...prev.posts];
-            const dataToInsert = (Array.isArray(dataArray) ? dataArray : [dataArray]).map((p) => ({
-              ...p,
-              selected: false,
-            }));
-            
-            // If there's an empty post, replace it, otherwise append to top
-            if (newPosts.length === 1 && !newPosts[0].content && !newPosts[0].imagePath && !newPosts[0].trelloCardId) {
-              newPosts.splice(0, 1, ...dataToInsert);
-            } else {
-              newPosts.unshift(...dataToInsert);
-            }
-            return {
-              ...prev,
-              posts: newPosts,
-              trelloBoardId: extraInfo?.boardId || prev.trelloBoardId,
-              trelloListId: extraInfo?.listId || prev.trelloListId,
-            };
-          });
+          setForm(prev => ({
+            ...prev,
+            posts: appendNewTrelloPosts(prev.posts, Array.isArray(dataArray) ? dataArray : [dataArray]),
+            trelloBoardId: extraInfo?.boardId || prev.trelloBoardId,
+            trelloListId: extraInfo?.listId || prev.trelloListId,
+          }));
         }}
       />
     </div>

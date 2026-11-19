@@ -115,7 +115,7 @@ contextBridge.exposeInMainWorld('desktopApp', {
   saveTrelloConfig: (config) => ipcRenderer.invoke('trello:save_config', config),
   getTrelloBoards: () => ipcRenderer.invoke('trello:get_boards'),
   getTrelloLists: (boardId) => ipcRenderer.invoke('trello:get_lists', boardId),
-  getTrelloCards: (listId) => ipcRenderer.invoke('trello:get_cards', listId),
+  getTrelloCards: (listId, excludedCardIds = []) => ipcRenderer.invoke('trello:get_cards', listId, excludedCardIds),
   downloadTrelloImage: (payload) => ipcRenderer.invoke('trello:download_image', payload),
   getTrelloThumbnailBase64: (url) => ipcRenderer.invoke('trello:get_thumbnail_base64', url),
   wrapTinfosLink: (originalLink) => ipcRenderer.invoke('trello:wrap_tinfos', originalLink),

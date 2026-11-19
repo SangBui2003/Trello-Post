@@ -135,8 +135,8 @@ function register(ctx) {
     return getManager().getLists(boardId);
   });
 
-  ipcMain.handle('trello:get_cards', async (event, listId) => {
-    return getManager().getCards(listId);
+  ipcMain.handle('trello:get_cards', async (event, listId, excludedCardIds = []) => {
+    return getManager().getCards(listId, 2, excludedCardIds);
   });
 
   ipcMain.handle('trello:download_image', async (event, { cardId, fileName }) => {
@@ -230,10 +230,11 @@ function register(ctx) {
     return true;
   });
 
-  ipcMain.handle('trello:sync_cards', async (event, { listId, autoWrapLink = true }) => {
+  ipcMain.handle('trello:sync_cards', async (event, { listId, autoWrapLink = true, excludedCardIds = [] }) => {
     if (!listId) throw new Error('Chưa chọn danh sách Trello (List ID trống)');
     const manager = getManager();
-    const cards = await manager.getCards(listId);
+    // Exclude existing posts before link wrapping and other per-card processing.
+    const cards = await manager.getCards(listId, 2, excludedCardIds);
     if (!cards || cards.length === 0) return [];
 
     const cfg = getTinfosConfig();
