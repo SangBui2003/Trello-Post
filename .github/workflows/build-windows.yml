@@ -3,8 +3,15 @@ name: Build PostPilot Windows EXE
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     paths:
       - '.github/workflows/build-windows.yml'
+      - 'src/**'
+      - 'renderer/**'
+      - 'preload.js'
+      - 'main.js'
+      - 'package*.json'
 
 permissions:
   contents: read
