@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import {
   Plus, Trash2, X, RefreshCw, KeyRound,
-  ChevronDown, ChevronUp, ExternalLink, Edit2, Check, Globe, GripVertical, Info, Download, CloudUpload, Settings, Search, Loader2
+  ChevronDown, ChevronUp, ExternalLink, Edit2, Check, Globe, Square, GripVertical, Info, Download, CloudUpload, Settings, Search, Loader2
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import ProfileFormModal from '../components/ProfileFormModal'
@@ -12,6 +12,7 @@ export default function ProfileManagerPage() {
   const [profiles, setProfiles] = useState([])
   const [busy, setBusy] = useState(false)
   const [openingProfileIds, setOpeningProfileIds] = useState(new Set())
+  const [closingProfileIds, setClosingProfileIds] = useState(new Set())
   const [runningProfileIds, setRunningProfileIds] = useState(new Set())
   const [expandedProfileId, setExpandedProfileId] = useState(null)
   const [scanningProfileId, setScanningProfileId] = useState(null)
@@ -145,15 +146,24 @@ export default function ProfileManagerPage() {
     setIsAddModalOpen(true)
   }
 
-  const handleCreateProfile = async ({ name, cookieString, metadata }) => {
+  const handleCreateProfile = async ({ name, metadata }) => {
     if (!window.desktopApp) return
 
+    let createdProfile
     try {
-      await window.desktopApp.saveProfile({ name, cookieString, metadata })
+      // Do not ask for cookies first. Save the profile, then open its own Chromium session.
+      createdProfile = await window.desktopApp.saveProfile({ name, cookieString: '', metadata })
       await loadProfiles()
       setIsAddModalOpen(false)
+      setErrorStatus('')
     } catch (err) {
       setErrorStatus(t('profiles.alerts.error_saving') + err.message)
+      return
+    }
+
+    if (createdProfile?.id) {
+      // Facebook opens directly; saved UID/password can be used by the existing auto-login.
+      await handleOpenProfile(createdProfile.id)
     }
   }
 
@@ -197,6 +207,7 @@ export default function ProfileManagerPage() {
   }
 
   const handleOpenProfile = async (profileId) => {
+    if (closingProfileIds.has(String(profileId))) return
     setOpeningProfileIds(prev => new Set(prev).add(profileId))
     try {
       if (window.desktopApp) {
@@ -208,6 +219,23 @@ export default function ProfileManagerPage() {
       setOpeningProfileIds(prev => {
         const next = new Set(prev)
         next.delete(profileId)
+        return next
+      })
+    }
+  }
+
+  const handleCloseProfile = async (profileId) => {
+    if (!window.desktopApp?.closeProfile) return
+    const key = String(profileId)
+    setClosingProfileIds(prev => new Set(prev).add(key))
+    try {
+      await window.desktopApp.closeProfile(profileId)
+    } catch (err) {
+      setErrorStatus('Lỗi đóng Profile: ' + (err.message || err))
+    } finally {
+      setClosingProfileIds(prev => {
+        const next = new Set(prev)
+        next.delete(key)
         return next
       })
     }
@@ -462,10 +490,12 @@ export default function ProfileManagerPage() {
                           {(() => {
                             const isRunning = runningProfileIds.has(String(p.id))
                             const isOpening = openingProfileIds.has(p.id)
+                            const isClosing = closingProfileIds.has(String(p.id))
                             return (
+                              <>
                               <button
                                 onClick={() => handleOpenProfile(p.id)}
-                                disabled={busy || isOpening}
+                                disabled={busy || isOpening || isClosing}
                                 className={`p-2 rounded-lg transition-all relative ${
                                   isRunning
                                     ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 ring-1 ring-emerald-500/40'
@@ -488,6 +518,18 @@ export default function ProfileManagerPage() {
                                   <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900 animate-pulse" />
                                 )}
                               </button>
+                              {(isRunning || isOpening) && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCloseProfile(p.id)}
+                                  disabled={busy || isClosing}
+                                  className="p-2 rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-40"
+                                  title={isClosing ? 'Đang đóng trình duyệt...' : 'Đóng trình duyệt Profile (không xóa Profile)'}
+                                >
+                                  {isClosing ? <Loader2 className="w-4.5 h-4.5 animate-spin" /> : <Square className="w-4.5 h-4.5" />}
+                                </button>
+                              )}
+                              </>
                             )
                           })()}
                           <button
