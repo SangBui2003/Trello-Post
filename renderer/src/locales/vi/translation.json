@@ -107,6 +107,8 @@
     "buttons": {
       "add_profile": "Thêm Profile mới"
     },
+    "search_placeholder": "Tìm kiếm theo tên...",
+    "no_search_results": "Không tìm thấy Profile nào phù hợp.",
     "empty_state": "Chưa có Profile nào được lưu.",
     "tooltips": {
       "rescan": "Quét lại danh sách trang",

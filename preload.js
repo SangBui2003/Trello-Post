@@ -34,6 +34,14 @@ contextBridge.exposeInMainWorld('desktopApp', {
   updateProfileToken: (profileId, name, cookieString, metadata) => ipcRenderer.invoke('profile:update_token', { profileId, name, cookieString, metadata }),
   exportProfilesToExcel: (profileIds) => ipcRenderer.invoke('profile:export_excel', profileIds),
   syncProfilesToSheets: (profileIds, webAppUrl) => ipcRenderer.invoke('profile:sync_sheets', { profileIds, webAppUrl }),
+  getRunningProfileIds: () => ipcRenderer.invoke('profile:running_ids'),
+  onProfileRunningUpdate: (callback) => {
+    const listener = (_, ids) => callback(ids);
+    ipcRenderer.on('profile:running_update', listener);
+    return () => {
+      ipcRenderer.removeListener('profile:running_update', listener);
+    };
+  },
 
   getQueues: () => ipcRenderer.invoke('queue:list'),
   addQueue: (payload) => ipcRenderer.invoke('queue:add', payload),
@@ -109,6 +117,7 @@ contextBridge.exposeInMainWorld('desktopApp', {
   getTrelloLists: (boardId) => ipcRenderer.invoke('trello:get_lists', boardId),
   getTrelloCards: (listId) => ipcRenderer.invoke('trello:get_cards', listId),
   downloadTrelloImage: (payload) => ipcRenderer.invoke('trello:download_image', payload),
+  getTrelloThumbnailBase64: (url) => ipcRenderer.invoke('trello:get_thumbnail_base64', url),
   wrapTinfosLink: (originalLink) => ipcRenderer.invoke('trello:wrap_tinfos', originalLink),
   loginTinfos: () => ipcRenderer.invoke('trello:login_tinfos'),
   getTinfosConfig: () => ipcRenderer.invoke('trello:get_tinfos_config'),
@@ -117,4 +126,5 @@ contextBridge.exposeInMainWorld('desktopApp', {
   saveCTAConfig: (config) => ipcRenderer.invoke('trello:save_cta_config', config),
   getTrelloSelections: (queueId) => ipcRenderer.invoke('trello:get_selections', queueId),
   saveTrelloSelections: (payload) => ipcRenderer.invoke('trello:save_selections', payload),
+  syncTrelloCards: (payload) => ipcRenderer.invoke('trello:sync_cards', payload),
 });

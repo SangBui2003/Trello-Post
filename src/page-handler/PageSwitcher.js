@@ -12,17 +12,37 @@ class PageSwitcher {
   async switchIdentity(page, pageUrl, onStatus = () => {}) {
     onStatus(t('backend.status.switching_identity'));
 
-    // 1. Access Page URL directly
-    onStatus(t('backend.status.accessing_page_url', {url: pageUrl}));
-    await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await delay(2000);
+    const targetIdMatch = (pageUrl || '').match(/[?&]id=(\d+)|facebook\.com\/(\d{10,})/i);
+    const targetPageId = targetIdMatch ? (targetIdMatch[1] || targetIdMatch[2]) : null;
+
+    const isMatchingIdentity = (cookies) => {
+      if (!cookies || !cookies.iUser || cookies.iUser === cookies.cUser) return false;
+      if (targetPageId) return cookies.iUser === targetPageId;
+      return true;
+    };
+
+    // Early check: nếu cookie đã thể hiện đang dùng đúng danh tính Fanpage thì bỏ qua bước chuyển
+    const initialCookies = await this._getIdentityCookies(page);
+    if (isMatchingIdentity(initialCookies)) {
+      onStatus(t('backend.status.already_fanpage') + ' (Early Cookie Check)', 'success');
+      return true;
+    }
+
+    // 1. Chỉ điều hướng nếu tab chưa ở đúng URL Fanpage
+    if (!this._isAtTargetPage(page.url(), pageUrl, targetPageId)) {
+      onStatus(t('backend.status.accessing_page_url', {url: pageUrl}));
+      await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await delay(2000);
+    } else {
+      await delay(1000);
+    }
 
     // 2. Capture pre-click state for change detection
     const preClickUrl = page.url();
     const preClickCookies = await this._getIdentityCookies(page);
 
-    // Early check: if we are already using a Page identity, we can skip switching
-    if (preClickCookies.iUser && preClickCookies.iUser !== preClickCookies.cUser) {
+    // Early check: if we are already using the target Page identity, we can skip switching
+    if (isMatchingIdentity(preClickCookies)) {
       onStatus(t('backend.status.already_fanpage') + ' (Early Cookie Check)', 'success');
       return true;
     }
@@ -100,12 +120,26 @@ class PageSwitcher {
 
     // 6. Check identity cookies directly
     const currentCookies = await this._getIdentityCookies(page);
-    if (currentCookies.iUser && currentCookies.iUser !== currentCookies.cUser) {
+    if (isMatchingIdentity(currentCookies)) {
       onStatus(t('backend.status.already_fanpage') + ' (Cookie check)', 'success');
       return true;
     }
 
     throw new Error(t('backend.errors.cannot_switch'));
+  }
+
+  _isAtTargetPage(currentUrl, targetUrl, targetPageId = null) {
+    const cur = (currentUrl || '').toLowerCase();
+    if (!cur.includes('facebook.com') || cur.includes('business.facebook.com')) return false;
+    if (targetPageId) {
+      return cur.includes(targetPageId.toLowerCase());
+    }
+    const cleanTarget = (targetUrl || '')
+      .replace(/^https?:\/\/(www\.)?facebook\.com\/?/i, '')
+      .replace(/\/+$/, '')
+      .toLowerCase();
+    if (!cleanTarget) return true;
+    return cur.includes(cleanTarget);
   }
 
   /**

@@ -8,9 +8,7 @@ import { ThemeProvider } from './components/ThemeContext'
 import PostGroupPage from './pages/PostGroupPage'
 import PostQueuePage from './pages/PostQueuePage'
 import ProfileManagerPage from './pages/ProfileManagerPage'
-import GroupManagerPage from './pages/GroupManagerPage'
 import TerminalPage from './pages/TerminalPage'
-import SyncQueuePage from './pages/SyncQueuePage'
 import SettingsPage from './pages/SettingsPage'
 
 function App() {

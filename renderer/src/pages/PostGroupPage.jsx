@@ -52,6 +52,7 @@ export default function PostGroupPage({ config }) {
           imagePath,
           cookieString,
           pageIdentity,
+          profileId: selectedProfile,
         })
         setReadyForConfirm(true)
       }

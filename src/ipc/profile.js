@@ -1,9 +1,66 @@
 const { ipcMain } = require('electron');
-const { extractFacebookCookie } = require('../cookie-extractor');
-const { scanPages, syncGroups } = require('../page-handler');
+const { extractFacebookCookie, parseCookieString } = require('../cookie-extractor');
+const { scanPages } = require('../page-handler');
 
 // Track running browsers to synchronize them with profile updates
 const runningBrowsers = new Map();
+const launchingProfiles = new Set();
+const launchingPromises = new Map();
+
+/**
+ * Đưa cửa sổ trình duyệt và tab chỉ định lên trước màn hình (Foreground)
+ */
+async function focusBrowserWindow(browser, page) {
+  if (!browser) return;
+
+  // 1. Bring tab to front & restore window state via CDP
+  try {
+    if (page && !page.isClosed()) {
+      await page.bringToFront().catch(() => {});
+      const session = await page.target().createCDPSession();
+      try {
+        const { windowId } = await session.send('Browser.getWindowForTarget');
+        if (windowId) {
+          // Khôi phục kích thước cửa sổ nếu đang bị minimize
+          await session.send('Browser.setWindowBounds', {
+            windowId,
+            bounds: { windowState: 'normal' },
+          });
+          // Phóng to cửa sổ
+          await session.send('Browser.setWindowBounds', {
+            windowId,
+            bounds: { windowState: 'maximized' },
+          });
+        }
+      } catch (err) {
+      } finally {
+        await session.detach().catch(() => {});
+      }
+    }
+  } catch (e) {}
+
+  // 2. Kích hoạt cửa sổ lên đầu màn hình trên Windows bằng Windows Shell AppActivate
+  if (process.platform === 'win32') {
+    try {
+      const pid = browser.process()?.pid;
+      if (pid) {
+        const { exec } = require('child_process');
+        exec(`powershell -NoProfile -Command "$wshell = New-Object -ComObject WScript.Shell; $wshell.AppActivate(${pid})"`);
+      }
+    } catch (e) {
+      console.error('Lỗi kích hoạt cửa sổ trình duyệt:', e);
+    }
+  }
+}
+
+function notifyRunningProfiles() {
+  try {
+    const { getMainWindow } = require('./helpers');
+    const mainWindow = getMainWindow();
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send('profile:running_update', Array.from(runningBrowsers.keys()));
+  } catch (e) {}
+}
 
 /**
  * @param {{ pushStatus: Function, db: Object }} ctx
@@ -57,24 +114,6 @@ function register(ctx) {
 
   ipcMain.handle('profile:save', async (_, payload) => {
     const profile = await db.addProfile(payload);
-
-    if (payload.cookieString) {
-      pushStatus('Scanning Fanpages...', 'running');
-
-      try {
-        const pages = await scanPages(payload.cookieString);
-        if (pages.length > 0) {
-          await db.updateProfilePages(profile.id, pages);
-          profile.pages = pages;
-          pushStatus(`Found ${pages.length} Fanpages.`, 'success');
-        } else {
-          pushStatus('No Fanpages found or account has no pages.', 'info');
-        }
-      } catch (error) {
-        pushStatus(`Fanpage scan error: ${error.message}`, 'error');
-      }
-    }
-
     return profile;
   });
 
@@ -132,15 +171,7 @@ function register(ctx) {
         }
       }
 
-      // Re-scan pages với token mới
-      pushStatus('Token updated. Rescanning Fanpages...', 'running');
-      try {
-        const pages = await scanPages(cookieString);
-        await db.updateProfilePages(profileId, pages);
-        pushStatus(`Token updated & scan complete: ${pages.length} Fanpages.`, 'success');
-      } catch (error) {
-        pushStatus(`Token updated but Fanpage scan failed: ${error.message}`, 'error');
-      }
+      pushStatus(`Token updated successfully.`, 'success');
     } else {
       pushStatus('Profile updated.', 'success');
     }
@@ -152,36 +183,185 @@ function register(ctx) {
     return await db.updatePageName(profileId, pageId, newName);
   });
 
+  ipcMain.handle('profile:running_ids', () => {
+    return Array.from(runningBrowsers.keys());
+  });
+
   ipcMain.handle('profile:open', async (_, profileId) => {
+    const key = String(profileId);
     const profile = await db.getProfileById(profileId);
     if (!profile) throw new Error('Profile does not exist.');
 
+    // 1. Nếu đang trong tiến trình khởi chạy browser cho profile này, thông báo và đợi hoàn tất
+    if (launchingProfiles.has(key)) {
+      pushStatus(`Trình duyệt cho profile: ${profile.name} đang được khởi chạy, vui lòng đợi trong giây lát...`, 'info');
+      if (launchingPromises.has(key)) {
+        await launchingPromises.get(key).catch(() => {});
+      }
+      return true;
+    }
+
+    // 2. Nếu profile này đã có trình duyệt đang mở và còn kết nối tốt
+    if (runningBrowsers.has(key)) {
+      const active = runningBrowsers.get(key);
+      if (active && active.initPromise) {
+        await active.initPromise.catch(() => {});
+      }
+      if (active && active.browser && active.browser.isConnected()) {
+        try {
+          const pages = await active.browser.pages();
+          let targetPage = active.targetPage && !active.targetPage.isClosed() ? active.targetPage : null;
+          if (targetPage) {
+            try {
+              const u = (targetPage.url() || '').toLowerCase();
+              if (u.startsWith('file://')) targetPage = null;
+            } catch {
+              targetPage = null;
+            }
+          }
+          
+          if (!targetPage && pages.length > 0) {
+            targetPage = pages.find((p) => {
+              try {
+                const u = (p.url() || '').toLowerCase();
+                return u.includes('facebook.com') && !u.includes('business.facebook.com');
+              } catch {
+                return false;
+              }
+            }) || pages.find((p) => {
+              try {
+                return !(p.url() || '').toLowerCase().startsWith('file://');
+              } catch {
+                return false;
+              }
+            }) || pages[0];
+            active.targetPage = targetPage;
+          }
+
+          if (!targetPage || targetPage.isClosed()) {
+            const { setWindowTitle } = require('../browser/BrowserLauncher');
+            targetPage = await active.browser.newPage();
+            await setWindowTitle(targetPage, profile.name);
+            await targetPage.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded' });
+            active.targetPage = targetPage;
+          }
+
+          await focusBrowserWindow(active.browser, targetPage);
+          pushStatus(`Đã chuyển sang trình duyệt đang mở của: ${profile.name}`, 'info');
+          return true;
+        } catch (e) {
+          console.error('Lỗi khi kích hoạt trình duyệt đang mở:', e);
+          runningBrowsers.delete(key);
+          notifyRunningProfiles();
+        }
+      } else {
+        runningBrowsers.delete(key);
+        notifyRunningProfiles();
+      }
+    }
+
+    launchingProfiles.add(key);
     pushStatus(`Mở trình duyệt cho profile: ${profile.name}...`, 'running');
     
-    try {
-      const { launchStealthBrowser } = require('../browser/BrowserLauncher');
-      const browser = await launchStealthBrowser({ headless: false });
+    const initPromise = (async () => {
+      const { launchStealthBrowser, setWindowTitle, getProfileUserDataDir } = require('../browser/BrowserLauncher');
+      // Sử dụng userDataDir riêng cho mỗi profile để lưu vĩnh viễn cookies, IndexedDB và token bảo mật thiết bị
+      const userDataDir = getProfileUserDataDir(profileId);
+      const browser = await launchStealthBrowser({ headless: false, userDataDir });
       const [page] = await browser.pages();
       const targetPage = page || (await browser.newPage());
       
-      const cookies = parseCookieString(profile.cookieString);
+      await setWindowTitle(targetPage, profile.name);
+      
+      // Đăng ký ngay vào runningBrowsers để ngăn chặn mọi click mở trùng lặp
+      const entry = { browser, targetPage, infoPage: null, initPromise: null };
+      runningBrowsers.set(key, entry);
+      notifyRunningProfiles();
 
-      if (cookies.length > 0) {
-        await targetPage.setCookie(...cookies);
+      // Hook for new tabs opened by the user
+      browser.on('targetcreated', async (target) => {
+        if (target.type() === 'page') {
+          const newPage = await target.page().catch(() => null);
+          if (newPage) await setWindowTitle(newPage, profile.name);
+        }
+      });
+
+      // Mở tab hiển thị thông tin tài khoản, 2FA và mã 2FA trực tiếp
+      const { openProfileInfoTab } = require('../browser/ProfileInfoTab');
+      let infoPage = null;
+      try {
+        infoPage = await openProfileInfoTab(browser, profile);
+        await setWindowTitle(infoPage, `${profile.name} - 2FA & Info`);
+        entry.infoPage = infoPage;
+      } catch (infoErr) {
+        console.error('Không thể mở tab thông tin profile:', infoErr);
+      }
+      
+      // Chỉ nạp cookie từ DB nếu trình duyệt chưa có sẵn c_user & xs hợp lệ trong userDataDir
+      const existingCookies = await targetPage.cookies('https://www.facebook.com').catch(() => []);
+      const hasValidSessionCookies = existingCookies.some(c => c.name === 'c_user' && c.value) &&
+                                     existingCookies.some(c => c.name === 'xs' && c.value);
+      if (!hasValidSessionCookies) {
+        const cookies = parseCookieString(profile.cookieString);
+        if (cookies.length > 0) {
+          await targetPage.setCookie(...cookies);
+        }
       }
 
-      await targetPage.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded' });
-      await targetPage.bringToFront();
-      
-      runningBrowsers.set(profileId, { browser, targetPage });
+      const currentUrl = (targetPage.url() || '').toLowerCase();
+      if (!currentUrl.includes('www.facebook.com') || currentUrl.includes('business.facebook.com')) {
+        await targetPage.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded' });
+      }
+      await focusBrowserWindow(browser, targetPage);
       pushStatus(`Đã mở trình duyệt cho profile: ${profile.name}.`, 'success');
       
-      // Auto-sync cookies from running browser to DB every 10 seconds
+      // Kiểm tra trạng thái đăng nhập sau khi load trang
+      await new Promise(r => setTimeout(r, 3000));
+      const { checkFacebookLoginState, autoLoginFacebook } = require('../login-handler/FacebookLogin');
+      let loginCheck = await checkFacebookLoginState(targetPage, profile.metadata?.uid);
+
+      if (!loginCheck.isLoggedIn && hasValidSessionCookies && profile.cookieString) {
+        const fallbackCookies = parseCookieString(profile.cookieString);
+        if (fallbackCookies.length > 0) {
+          await targetPage.setCookie(...fallbackCookies);
+          await targetPage.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded' });
+          await new Promise(r => setTimeout(r, 3000));
+          loginCheck = await checkFacebookLoginState(targetPage, profile.metadata?.uid);
+        }
+      }
+
+      if (!loginCheck.isLoggedIn) {
+        if (profile.metadata?.uid && profile.metadata?.password) {
+          pushStatus(`Phát hiện chưa đăng nhập. Bắt đầu tự động đăng nhập an toàn cho ${profile.name}...`, 'running');
+          const loginOk = await autoLoginFacebook(targetPage, profile.metadata, pushStatus);
+          if (loginOk) {
+            try {
+              const curCookies = await targetPage.cookies();
+              if (curCookies && curCookies.length > 0) {
+                const hasCUser = curCookies.some(c => c.name === 'c_user' && c.value);
+                const hasXs = curCookies.some(c => c.name === 'xs' && c.value);
+                if (hasCUser && hasXs) {
+                  await db.updateCookieString(profileId, JSON.stringify(curCookies));
+                  pushStatus(`Đã lưu phiên đăng nhập và Cookie mới cho ${profile.name}!`, 'success');
+                }
+              }
+            } catch (e) {}
+          }
+        }
+      } else {
+        pushStatus(`Tài khoản ${profile.name} đã đăng nhập sẵn. Giữ nguyên phiên làm việc.`, 'info');
+      }
+
+      // Auto-sync cookies from running browser to DB every 10 seconds (CHỈ LƯU KHI CÓ c_user VÀ xs HỢP LỆ)
       const syncInterval = setInterval(async () => {
         try {
           const currentCookies = await targetPage.cookies();
           if (currentCookies && currentCookies.length > 0) {
-            await db.updateCookieString(profileId, JSON.stringify(currentCookies));
+            const hasCUser = currentCookies.some(c => c.name === 'c_user' && c.value);
+            const hasXs = currentCookies.some(c => c.name === 'xs' && c.value);
+            if (hasCUser && hasXs) {
+              await db.updateCookieString(profileId, JSON.stringify(currentCookies));
+            }
           }
         } catch (e) {
           // Ignore errors (e.g. page is closed)
@@ -190,22 +370,41 @@ function register(ctx) {
 
       browser.on('disconnected', () => {
         clearInterval(syncInterval);
-        runningBrowsers.delete(profileId);
+        runningBrowsers.delete(key);
+        notifyRunningProfiles();
         pushStatus(`Đã đóng trình duyệt của profile: ${profile.name}`, 'info');
       });
 
       return true;
+    })();
+
+    launchingPromises.set(key, initPromise);
+    const activeEntry = runningBrowsers.get(key);
+    if (activeEntry) activeEntry.initPromise = initPromise;
+
+    try {
+      return await initPromise;
     } catch (error) {
       pushStatus(`Lỗi khi mở trình duyệt: ${error.message}`, 'error');
+      runningBrowsers.delete(key);
+      notifyRunningProfiles();
       throw error;
+    } finally {
+      launchingProfiles.delete(key);
+      launchingPromises.delete(key);
+      const currentEntry = runningBrowsers.get(key);
+      if (currentEntry) currentEntry.initPromise = null;
     }
   });
+
   ipcMain.handle('profile:export_excel', async (event, profileIds) => {
     try {
       const profiles = await db.getProfiles();
-      const exportData = profileIds 
-        ? profiles.filter(p => profileIds.includes(p.id))
-        : profiles;
+      let exportData = profiles;
+      if (profileIds && Array.isArray(profileIds) && profileIds.length > 0) {
+        const profileMap = new Map(profiles.map(p => [p.id, p]));
+        exportData = profileIds.map(id => profileMap.get(id)).filter(Boolean);
+      }
 
       if (exportData.length === 0) return null;
 
@@ -219,8 +418,9 @@ function register(ctx) {
       if (!filePath) return null;
 
       const XLSX = require('xlsx');
-      const dataToExport = exportData.map(p => {
+      const dataToExport = exportData.map((p, index) => {
         return {
+          'STT': index + 1,
           'Tên Profile': p.name,
           'Danh mục': p.metadata?.category === 'adm' ? 'Admin' : p.metadata?.category === 'btv' ? 'BTV' : p.metadata?.category || '',
           'UID': p.metadata?.uid || '',
@@ -254,13 +454,16 @@ function register(ctx) {
   ipcMain.handle('profile:sync_sheets', async (event, { profileIds, webAppUrl }) => {
     try {
       const profiles = await db.getProfiles();
-      const exportData = profileIds 
-        ? profiles.filter(p => profileIds.includes(p.id))
-        : profiles;
+      let exportData = profiles;
+      if (profileIds && Array.isArray(profileIds) && profileIds.length > 0) {
+        const profileMap = new Map(profiles.map(p => [p.id, p]));
+        exportData = profileIds.map(id => profileMap.get(id)).filter(Boolean);
+      }
 
       if (exportData.length === 0) return { success: false, message: 'Không có dữ liệu để đồng bộ' };
 
-      const dataToExport = exportData.map(p => ({
+      const dataToExport = exportData.map((p, index) => ({
+        stt: index + 1,
         name: p.name,
         category: p.metadata?.category || '',
         uid: p.metadata?.uid || '',
@@ -304,35 +507,11 @@ function register(ctx) {
   });
 }
 
-function parseCookieString(cookieString) {
-  let cookies = [];
-  try {
-    const parsed = JSON.parse(cookieString);
-    const cookieArray = Array.isArray(parsed) ? parsed : parsed.cookies || [];
-    if (cookieArray.length > 0) {
-      cookies = cookieArray.map((cookie) => ({
-        name: cookie.name,
-        value: cookie.value,
-        domain: cookie.domain || '.facebook.com',
-        path: cookie.path || '/',
-      }));
-    }
-  } catch {
-    const cookiePairs = cookieString.split(';').map((pair) => pair.trim()).filter(Boolean);
-    cookies = cookiePairs
-      .map((pair) => {
-        const splitIndex = pair.indexOf('=');
-        if (splitIndex === -1) return null;
-        return {
-          name: pair.slice(0, splitIndex).trim(),
-          value: pair.slice(splitIndex + 1).trim(),
-          domain: '.facebook.com',
-          path: '/',
-        };
-      })
-      .filter((cookie) => cookie && cookie.name);
-  }
-  return cookies;
-}
-
-module.exports = { register };
+module.exports = {
+  register,
+  runningBrowsers,
+  launchingProfiles,
+  launchingPromises,
+  focusBrowserWindow,
+  notifyRunningProfiles,
+};

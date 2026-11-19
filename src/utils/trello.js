@@ -35,8 +35,22 @@ class TrelloManager {
     return this._get(`/boards/${boardId}/lists`);
   }
 
-  async getCards(listId) {
-    return this._get(`/lists/${listId}/cards`);
+  async getCards(listId, maxAgeDays = 2) {
+    const cards = await this._get(`/lists/${listId}/cards?attachments=true`);
+    if (!Array.isArray(cards)) return [];
+    if (!maxAgeDays || maxAgeDays <= 0) return cards;
+
+    const cutoffMs = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+    return cards.filter((card) => {
+      const idHex = card?.id ? String(card.id).slice(0, 8) : '';
+      const createdMs = idHex.length === 8 ? parseInt(idHex, 16) * 1000 : 0;
+      const activityMs = card?.dateLastActivity ? Date.parse(card.dateLastActivity) : 0;
+      const cardTimeMs = Math.max(
+        Number.isFinite(createdMs) ? createdMs : 0,
+        Number.isFinite(activityMs) ? activityMs : 0
+      );
+      return cardTimeMs >= cutoffMs;
+    });
   }
 
   async getCardAttachments(cardId) {

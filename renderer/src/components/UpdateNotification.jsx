@@ -84,15 +84,15 @@ export default function UpdateNotification() {
           <ReactMarkdown
             className="space-y-2"
             components={{
-              p: ({node, ...props}) => <p className="mb-2 last:mb-0" {...props} />,
-              ul: ({node, ...props}) => <ul className="list-disc pl-4 mb-2 space-y-1" {...props} />,
-              ol: ({node, ...props}) => <ol className="list-decimal pl-4 mb-2 space-y-1" {...props} />,
-              li: ({node, ...props}) => <li className="pl-1" {...props} />,
-              a: ({node, ...props}) => <a className="text-blue-600 hover:underline" target="_blank" rel="noreferrer" {...props} />,
-              strong: ({node, ...props}) => <strong className="font-semibold text-slate-900 dark:text-slate-100" {...props} />,
-              h1: ({node, ...props}) => <h1 className="text-lg font-bold mt-3 mb-2" {...props} />,
-              h2: ({node, ...props}) => <h2 className="text-base font-bold mt-3 mb-2" {...props} />,
-              h3: ({node, ...props}) => <h3 className="text-sm font-bold mt-2 mb-1" {...props} />,
+              p: (props) => <p className="mb-2 last:mb-0" {...props} />,
+              ul: (props) => <ul className="list-disc pl-4 mb-2 space-y-1" {...props} />,
+              ol: (props) => <ol className="list-decimal pl-4 mb-2 space-y-1" {...props} />,
+              li: (props) => <li className="pl-1" {...props} />,
+              a: (props) => <a className="text-blue-600 hover:underline" target="_blank" rel="noreferrer" {...props} />,
+              strong: (props) => <strong className="font-semibold text-slate-900 dark:text-slate-100" {...props} />,
+              h1: (props) => <h1 className="text-lg font-bold mt-3 mb-2" {...props} />,
+              h2: (props) => <h2 className="text-base font-bold mt-3 mb-2" {...props} />,
+              h3: (props) => <h3 className="text-sm font-bold mt-2 mb-1" {...props} />,
             }}
           >
             {notes}

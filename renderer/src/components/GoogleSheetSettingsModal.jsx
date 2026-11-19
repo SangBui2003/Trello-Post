@@ -1,17 +1,18 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { X, Save, CheckCircle } from 'lucide-react'
 
 export default function GoogleSheetSettingsModal({ isOpen, onClose }) {
-  const [url, setUrl] = useState('')
+  const [url, setUrl] = useState(() => localStorage.getItem('googleSheetUrl') || '')
   const [showSaved, setShowSaved] = useState(false)
+  const [prevOpen, setPrevOpen] = useState(isOpen)
 
-  useEffect(() => {
+  if (isOpen !== prevOpen) {
+    setPrevOpen(isOpen)
     if (isOpen) {
-      const savedUrl = localStorage.getItem('googleSheetUrl') || ''
-      setUrl(savedUrl)
+      setUrl(localStorage.getItem('googleSheetUrl') || '')
       setShowSaved(false)
     }
-  }, [isOpen])
+  }
 
   const handleSave = () => {
     localStorage.setItem('googleSheetUrl', url.trim())

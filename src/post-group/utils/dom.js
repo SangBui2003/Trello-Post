@@ -33,27 +33,35 @@ async function safeClick(page, element) {
     node.scrollIntoView({
       block: 'center',
       inline: 'center',
-      behavior: 'auto',
+      behavior: 'instant',
     });
-  });
+  }).catch(() => {});
 
-  await delay(200);
+  await delay(250);
 
   try {
-    await element.click({ delay: 45 });
+    await element.click({ delay: 50 });
     await delay(600);
     return;
   } catch (error) {
     try {
-      await element.evaluate((node) => node.click());
-      await delay(600);
-      return;
-    } catch (innerError) {
       const box = await element.boundingBox();
-      if (box) {
-        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { delay: 25 });
+      if (box && box.width > 0 && box.height > 0) {
+        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { delay: 30 });
+        await delay(600);
         return;
       }
+    } catch (innerError) {}
+
+    try {
+      await element.evaluate((node) => {
+        node.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+        node.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+        node.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      });
+      await delay(600);
+      return;
+    } catch (evalError) {
       throw error;
     }
   }

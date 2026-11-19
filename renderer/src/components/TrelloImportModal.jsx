@@ -1,10 +1,53 @@
-import React, { useState, useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
-import { X, Search, Settings, ArrowRight } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Search, X, Settings, Image as ImageIcon, ArrowRight } from 'lucide-react';
+
+function CardListItem({ card, isSelected, selectedIndex, onClick }) {
+  const [thumbBase64, setThumbBase64] = useState(null);
+  
+  useEffect(() => {
+    let isMounted = true;
+    if (card.attachments && card.attachments.length > 0) {
+      const img = card.attachments.find(a => a.mimeType && a.mimeType.startsWith('image/'));
+      if (img) {
+        // Try to get a medium preview, fallback to first preview or url
+        const preview = img.previews?.find(p => p.width >= 300 && p.width <= 600) || img.previews?.[img.previews.length - 2] || img.previews?.[0];
+        const targetUrl = preview ? preview.url : img.url;
+        window.desktopApp.getTrelloThumbnailBase64(targetUrl).then(base64 => {
+          if (isMounted && base64) setThumbBase64(base64);
+        });
+      }
+    }
+    return () => { isMounted = false; };
+  }, [card]);
+
+  return (
+    <li 
+      className={`p-3 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors flex items-start ${isSelected ? 'bg-blue-100 dark:bg-blue-900/40 border-l-4 border-blue-500' : 'border-l-4 border-transparent'}`}
+      onClick={onClick}
+    >
+      <div className={`w-6 h-6 mt-1 rounded-[6px] border flex-shrink-0 mr-4 flex items-center justify-center transition-colors text-xs font-bold ${isSelected ? 'border-blue-500 bg-blue-500 text-white' : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-transparent'}`}>
+        {isSelected ? selectedIndex : ''}
+      </div>
+      
+      {thumbBase64 ? (
+        <img src={thumbBase64} alt="thumbnail" className="w-28 h-28 object-cover rounded-lg mr-4 flex-shrink-0 border border-slate-200 dark:border-slate-700" />
+      ) : (
+        <div className="w-28 h-28 rounded-lg mr-4 flex-shrink-0 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400">
+          <ImageIcon size={32} />
+        </div>
+      )}
+
+      <div className="flex-1 min-w-0">
+        <h4 className="text-slate-800 dark:text-slate-200 text-base font-semibold truncate">{card.name}</h4>
+        <p className="text-slate-500 dark:text-slate-400 text-sm mt-1.5 line-clamp-3 leading-relaxed">
+          {card.desc || <span className="italic">Không có nội dung</span>}
+        </p>
+      </div>
+    </li>
+  );
+}
 
 export default function TrelloImportModal({ isOpen, onClose, onImport, queueId }) {
-  const { t } = require('react-i18next').useTranslation();
-  
   const [step, setStep] = useState('settings'); // settings, browse, loading
   const [config, setConfig] = useState({ apiKey: '', apiToken: '' });
   
@@ -15,30 +58,20 @@ export default function TrelloImportModal({ isOpen, onClose, onImport, queueId }
   const [selectedBoard, setSelectedBoard] = useState('');
   const [selectedList, setSelectedList] = useState('');
   const [selectedCards, setSelectedCards] = useState([]);
+  const [autoWrapLink, setAutoWrapLink] = useState(true);
   
   const [loadingMsg, setLoadingMsg] = useState('');
+  const [prevOpen, setPrevOpen] = useState(isOpen);
 
-  useEffect(() => {
-    if (isOpen) {
-      window.desktopApp.getTrelloConfig().then(cfg => {
-        if (cfg) {
-          setConfig(cfg);
-          if (cfg.apiKey && cfg.apiToken) {
-            setStep('browse');
-            loadBoardsAndPreselect();
-          } else {
-            setStep('settings');
-          }
-        }
-      });
-    } else {
-      // Reset state on close but keep boards/lists cache
+  if (isOpen !== prevOpen) {
+    setPrevOpen(isOpen);
+    if (!isOpen) {
       setSelectedCards([]);
       setLoadingMsg('');
     }
-  }, [isOpen, queueId]);
+  }
 
-  const loadBoardsAndPreselect = async () => {
+  const loadBoardsAndPreselect = useCallback(async () => {
     try {
       setLoadingMsg('Đang lấy danh sách Bảng (Boards)...');
       setStep('loading');
@@ -69,7 +102,22 @@ export default function TrelloImportModal({ isOpen, onClose, onImport, queueId }
       console.error('Lỗi preselect Trello:', e);
       setStep('browse');
     }
-  };
+  }, [queueId]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    window.desktopApp.getTrelloConfig().then(cfg => {
+      if (cfg) {
+        setConfig(cfg);
+        if (cfg.apiKey && cfg.apiToken) {
+          setStep('browse');
+          loadBoardsAndPreselect();
+        } else {
+          setStep('settings');
+        }
+      }
+    });
+  }, [isOpen, loadBoardsAndPreselect]);
 
   const handleBoardChange = async (boardId) => {
     setSelectedBoard(boardId);
@@ -137,37 +185,66 @@ export default function TrelloImportModal({ isOpen, onClose, onImport, queueId }
         const card = cards.find(c => c.id === cardId);
         if (!card) continue;
 
-        const desc = card.desc || '';
-        const urlMatch = desc.match(/(https?:\/\/[^\s\n]+)/);
-        if (!urlMatch) {
-          alert(`Bỏ qua thẻ "${card.name}": Không tìm thấy link nào trong phần mô tả.`);
-          continue;
+        try {
+          const desc = card.desc || '';
+          const urlMatch = desc.match(/(https?:\/\/[^\s\n]+)/);
+          
+          let wrappedLink = '';
+          let baseContent = card.name;
+
+          if (urlMatch) {
+            const originalLink = urlMatch[0];
+            const cleanedDesc = desc.replace(originalLink, '').trim();
+            baseContent = cleanedDesc ? `${card.name}\n\n${cleanedDesc}` : card.name;
+            wrappedLink = originalLink;
+
+            if (autoWrapLink) {
+              setLoadingMsg(`Thẻ ${i+1}/${selectedCards.length}: Đang xử lý link (Tinfosmedia)...`);
+              try {
+                wrappedLink = await window.desktopApp.wrapTinfosLink(originalLink);
+              } catch (err) {
+                console.warn(`Thẻ "${card.name}": Lỗi wrap link (${err.message}). Dùng link gốc.`);
+                wrappedLink = originalLink;
+              }
+            }
+          } else {
+            baseContent = desc ? `${card.name}\n\n${desc}` : card.name;
+          }
+
+          setLoadingMsg(`Thẻ ${i+1}/${selectedCards.length}: Đang chuẩn bị bài viết...`);
+          const cta = ctaList.length > 0 ? ctaList[Math.floor(Math.random() * ctaList.length)] : "";
+          
+          // Trích xuất trực tiếp ảnh và thumbnail từ attachment của Trello (KHÔNG cần tải ảnh về máy lúc này)
+          const imgAttachment = (card.attachments || []).find(a => a.mimeType && a.mimeType.startsWith('image/')) || card.attachments?.[0];
+          const preview = imgAttachment?.previews?.find(p => p.width >= 300 && p.width <= 600) || imgAttachment?.previews?.[0];
+          const thumbnailUrl = preview ? preview.url : (imgAttachment?.url || '');
+          const imageUrl = imgAttachment ? imgAttachment.url : '';
+
+          importedPosts.push({
+            selected: false,
+            content: baseContent,
+            commentText: wrappedLink ? `${cta} ${wrappedLink}`.trim() : '',
+            imagePath: '',
+            imageBase64: '',
+            imageUrl: imageUrl,
+            thumbnailUrl: thumbnailUrl,
+            trelloCardId: card.id,
+            trelloCardName: card.name,
+            enableSchedule: false,
+            scheduleType: 'exact',
+            scheduledTime: '',
+            delayHours: 0,
+            delayMinutes: 30,
+          });
+        } catch (cardErr) {
+          console.error(`Lỗi xử lý thẻ "${card.name}":`, cardErr);
         }
-        
-        const originalLink = urlMatch[0];
-        const cleanedDesc = desc.replace(originalLink, '').trim();
-        const baseContent = cleanedDesc ? `${card.name}\n\n${cleanedDesc}` : card.name;
-
-        setLoadingMsg(`Thẻ ${i+1}/${selectedCards.length}: Đang mở trình duyệt lấy link Wrap (Tinfosmedia)... Vui lòng đợi...`);
-        
-        const wrappedLink = await window.desktopApp.wrapTinfosLink(originalLink);
-
-        setLoadingMsg(`Thẻ ${i+1}/${selectedCards.length}: Đang chuẩn bị nội dung...`);
-        const cta = ctaList.length > 0 ? ctaList[Math.floor(Math.random() * ctaList.length)] : "";
-        
-        setLoadingMsg(`Thẻ ${i+1}/${selectedCards.length}: Đang tải ảnh đính kèm từ Trello...`);
-        const imageResult = await window.desktopApp.downloadTrelloImage({ cardId: card.id, fileName: card.name });
-
-        importedPosts.push({
-          content: baseContent + '\n𝐅𝐮𝐥𝐥 𝐝𝐞𝐭𝐚𝐢𝐥𝐬 𝐯𝐢𝐚 🔗 𝐢𝐧 𝐜𝐨𝐦𝐦𝐞𝐧𝐭𝐬 👇',
-          commentText: `${cta} ${wrappedLink}`,
-          imagePath: imageResult?.filePath || '',
-          imageBase64: imageResult?.base64 || ''
-        });
       }
       
       if (importedPosts.length > 0) {
-        onImport(importedPosts);
+        onImport(importedPosts, { boardId: selectedBoard, listId: selectedList });
+      } else {
+        alert('Không có bài viết nào được nhập thành công.');
       }
       onClose();
     } catch (e) {
@@ -180,7 +257,7 @@ export default function TrelloImportModal({ isOpen, onClose, onImport, queueId }
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]">
         
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
@@ -266,9 +343,23 @@ export default function TrelloImportModal({ isOpen, onClose, onImport, queueId }
                 </div>
               </div>
 
+              {/* Tùy chọn Wrap link Tinfosmedia */}
+              <div className="flex items-center gap-2.5 px-1 py-1">
+                <input 
+                  type="checkbox"
+                  id="autoWrapCheckbox"
+                  checked={autoWrapLink}
+                  onChange={e => setAutoWrapLink(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 rounded border-slate-300 dark:border-slate-600 focus:ring-blue-500 cursor-pointer"
+                />
+                <label htmlFor="autoWrapCheckbox" className="text-xs font-medium text-slate-600 dark:text-slate-300 cursor-pointer select-none">
+                  Tự động bọc link theo cấu hình đầu web (Tinfosmedia)
+                </label>
+              </div>
+
               <div>
                 <div className="flex justify-between items-end mb-2">
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Thẻ bài viết (Cards)</label>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Thẻ bài viết trong 2 ngày gần nhất ({cards.length})</label>
                   {cards.length > 0 && (
                     <button 
                       onClick={() => {
@@ -284,7 +375,7 @@ export default function TrelloImportModal({ isOpen, onClose, onImport, queueId }
                     </button>
                   )}
                 </div>
-                <div className="border border-slate-200 dark:border-slate-600 rounded-lg h-60 overflow-y-auto bg-slate-50 dark:bg-slate-900/50">
+                <div className="border border-slate-200 dark:border-slate-600 rounded-lg h-[60vh] overflow-y-auto bg-slate-50 dark:bg-slate-900/50">
                   {cards.length === 0 ? (
                     <div className="p-4 text-center text-slate-400 text-sm italic mt-8">Chưa có dữ liệu. Vui lòng chọn List.</div>
                   ) : (
@@ -292,20 +383,17 @@ export default function TrelloImportModal({ isOpen, onClose, onImport, queueId }
                       {cards.map(c => {
                         const isSelected = selectedCards.includes(c.id);
                         return (
-                          <li 
+                          <CardListItem 
                             key={c.id} 
-                            className={`p-3 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors flex items-center ${isSelected ? 'bg-blue-100 dark:bg-blue-900/40 border-l-4 border-blue-500' : 'border-l-4 border-transparent'}`}
+                            card={c} 
+                            isSelected={isSelected} 
+                            selectedIndex={selectedCards.indexOf(c.id) + 1}
                             onClick={() => {
                               setSelectedCards(prev => 
                                 prev.includes(c.id) ? prev.filter(id => id !== c.id) : [...prev, c.id]
                               );
                             }}
-                          >
-                            <div className={`w-5 h-5 rounded-[6px] border flex-shrink-0 mr-3 flex items-center justify-center transition-colors text-[10px] font-bold ${isSelected ? 'border-blue-500 bg-blue-500 text-white' : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-transparent'}`}>
-                              {isSelected ? selectedCards.indexOf(c.id) + 1 : ''}
-                            </div>
-                            <span className="text-slate-800 dark:text-slate-200 text-sm font-medium truncate select-none">{c.name}</span>
-                          </li>
+                          />
                         );
                       })}
                     </ul>

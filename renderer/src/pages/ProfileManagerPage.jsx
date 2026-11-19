@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import {
   Plus, Trash2, X, RefreshCw, KeyRound,
-  ChevronDown, ChevronUp, ExternalLink, Edit2, Check, Globe, GripVertical, Info, Download, CloudUpload, Settings
+  ChevronDown, ChevronUp, ExternalLink, Edit2, Check, Globe, GripVertical, Info, Download, CloudUpload, Settings, Search, Loader2
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import ProfileFormModal from '../components/ProfileFormModal'
@@ -11,9 +11,12 @@ export default function ProfileManagerPage() {
   const { t } = useTranslation()
   const [profiles, setProfiles] = useState([])
   const [busy, setBusy] = useState(false)
+  const [openingProfileIds, setOpeningProfileIds] = useState(new Set())
+  const [runningProfileIds, setRunningProfileIds] = useState(new Set())
   const [expandedProfileId, setExpandedProfileId] = useState(null)
   const [scanningProfileId, setScanningProfileId] = useState(null)
   const [selectedCategory, setSelectedCategory] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
 
   // Editing page name states
   const [editingPageId, setEditingPageId] = useState(null)
@@ -60,13 +63,21 @@ export default function ProfileManagerPage() {
 
   useEffect(() => {
     loadProfiles()
+    if (window.desktopApp?.getRunningProfileIds) {
+      window.desktopApp.getRunningProfileIds().then(ids => {
+        setRunningProfileIds(new Set((ids || []).map(String)))
+      }).catch(() => {})
+    }
+    if (window.desktopApp?.onProfileRunningUpdate) {
+      const unsub = window.desktopApp.onProfileRunningUpdate(ids => {
+        setRunningProfileIds(new Set((ids || []).map(String)))
+      })
+      return () => unsub()
+    }
   }, [])
 
-  const sortedProfiles = React.useMemo(() => {
+  const allOrderedProfiles = React.useMemo(() => {
     let sorted = [...profiles]
-    if (selectedCategory) {
-      sorted = sorted.filter(p => p.metadata?.category === selectedCategory)
-    }
     sorted.sort((a, b) => {
       const idxA = profileOrder.indexOf(a.id)
       const idxB = profileOrder.indexOf(b.id)
@@ -76,9 +87,22 @@ export default function ProfileManagerPage() {
       return 0
     })
     return sorted
-  }, [profiles, profileOrder, selectedCategory])
+  }, [profiles, profileOrder])
+
+  const sortedProfiles = React.useMemo(() => {
+    let sorted = [...allOrderedProfiles]
+    if (selectedCategory) {
+      sorted = sorted.filter(p => p.metadata?.category === selectedCategory)
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase()
+      sorted = sorted.filter(p => (p.name || '').toLowerCase().includes(q))
+    }
+    return sorted
+  }, [allOrderedProfiles, selectedCategory, searchQuery])
 
   const handleDragStart = (e, id) => {
+    if (searchQuery.trim()) return
     setDraggedId(id)
     e.dataTransfer.effectAllowed = 'move'
     setTimeout(() => {
@@ -98,14 +122,14 @@ export default function ProfileManagerPage() {
 
   const handleDrop = (e, targetId) => {
     e.preventDefault()
-    if (!draggedId || draggedId === targetId) return
+    if (!draggedId || draggedId === targetId || searchQuery.trim()) return
 
-    const currentIndex = sortedProfiles.findIndex(p => p.id === draggedId)
-    const targetIndex = sortedProfiles.findIndex(p => p.id === targetId)
+    const currentIndex = allOrderedProfiles.findIndex(p => p.id === draggedId)
+    const targetIndex = allOrderedProfiles.findIndex(p => p.id === targetId)
     
     if (currentIndex === -1 || targetIndex === -1) return
 
-    const newOrder = [...sortedProfiles]
+    const newOrder = [...allOrderedProfiles]
     const [draggedItem] = newOrder.splice(currentIndex, 1)
     newOrder.splice(targetIndex, 0, draggedItem)
 
@@ -173,7 +197,7 @@ export default function ProfileManagerPage() {
   }
 
   const handleOpenProfile = async (profileId) => {
-    setBusy(true)
+    setOpeningProfileIds(prev => new Set(prev).add(profileId))
     try {
       if (window.desktopApp) {
         await window.desktopApp.openProfile(profileId)
@@ -181,7 +205,11 @@ export default function ProfileManagerPage() {
     } catch (err) {
       setErrorStatus("Lỗi mở Profile: " + err.message)
     } finally {
-      setBusy(false)
+      setOpeningProfileIds(prev => {
+        const next = new Set(prev)
+        next.delete(profileId)
+        return next
+      })
     }
   }
 
@@ -262,7 +290,7 @@ export default function ProfileManagerPage() {
     if (!window.desktopApp) return;
     setBusy(true);
     try {
-      const profileIds = sortedProfiles.map(p => p.id);
+      const profileIds = allOrderedProfiles.map(p => p.id);
       const res = await window.desktopApp.syncProfilesToSheets(profileIds, webAppUrl);
       if (res.success) {
         setErrorStatus(`Đồng bộ thành công: ${res.message}`);
@@ -294,7 +322,28 @@ export default function ProfileManagerPage() {
             <button onClick={() => setErrorStatus('')} className="text-red-400 hover:text-red-600 dark:hover:text-red-300">✕</button>
           </div>
         )}
-          <div className="flex gap-3 items-center">
+          <div className="flex flex-wrap gap-3 items-center">
+            {/* Search Input */}
+            <div className="relative group/search">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 group-focus-within/search:text-blue-500 transition-colors" />
+              <input
+                type="text"
+                placeholder={t('profiles.search_placeholder') || 'Tìm kiếm theo tên...'}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 pr-8 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all w-48 focus:w-60"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 rounded transition-colors"
+                  title="Xoá tìm kiếm"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
@@ -316,7 +365,7 @@ export default function ProfileManagerPage() {
             <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
               <button
                 onClick={handleSyncSheets}
-                disabled={busy || sortedProfiles.length === 0}
+                disabled={busy || allOrderedProfiles.length === 0}
                 className="px-3 py-1.5 text-sm font-medium text-emerald-600 dark:text-emerald-400 hover:bg-white dark:hover:bg-slate-700 rounded flex items-center gap-2 transition-colors disabled:opacity-50"
                 title="Đồng bộ danh sách lên Google Sheets"
               >
@@ -347,6 +396,7 @@ export default function ProfileManagerPage() {
         <table className="w-full text-left border-collapse">
           <thead className="sticky top-0 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-semibold z-10 transition-colors">
             <tr>
+              <th className="py-4 pl-6 pr-2 w-12 text-center text-slate-400">#</th>
               <th className="py-4 px-6">{t('profiles.table.profile_name')}</th>
               <th className="py-4 px-6">{t('profiles.table.date_added')}</th>
               <th className="py-4 px-6 text-center w-24">{t('profiles.table.pages')}</th>
@@ -356,10 +406,12 @@ export default function ProfileManagerPage() {
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {sortedProfiles.length === 0 ? (
               <tr>
-                <td colSpan="4" className="py-12 text-center text-slate-400 dark:text-slate-500 font-medium">{t('profiles.empty_state')}</td>
+                <td colSpan="5" className="py-12 text-center text-slate-400 dark:text-slate-500 font-medium">
+                  {searchQuery.trim() ? (t('profiles.no_search_results') || 'Không tìm thấy Profile nào phù hợp.') : t('profiles.empty_state')}
+                </td>
               </tr>
             ) : (
-              sortedProfiles.map((p) => {
+              sortedProfiles.map((p, index) => {
                 const pageCount = p.pages?.length || 0
                 const isExpanded = expandedProfileId === p.id
                 const isScanning = scanningProfileId === p.id
@@ -369,15 +421,20 @@ export default function ProfileManagerPage() {
                   <React.Fragment key={p.id}>
                     <tr 
                       className={`hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-colors group/row cursor-pointer ${draggedId === p.id ? 'opacity-50' : ''}`}
-                      draggable
+                      draggable={!searchQuery.trim()}
                       onDragStart={(e) => handleDragStart(e, p.id)}
                       onDragEnd={handleDragEnd}
                       onDragOver={handleDragOver}
                       onDrop={(e) => handleDrop(e, p.id)}
                     >
+                      <td className="py-4 pl-6 pr-2 text-center font-bold text-slate-400 dark:text-slate-500 w-12 shrink-0">
+                        {index + 1}
+                      </td>
                       <td className="py-4 px-6 font-medium text-slate-800 dark:text-slate-200">
                         <div className="flex items-center gap-2">
-                          <GripVertical className="w-4 h-4 text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0" />
+                          {!searchQuery.trim() && (
+                            <GripVertical className="w-4 h-4 text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0" />
+                          )}
                           <span className="truncate">{p.name}</span>
                         </div>
                       </td>
@@ -402,14 +459,37 @@ export default function ProfileManagerPage() {
                       </td>
                       <td className="py-4 px-6 text-center">
                         <div className="flex items-center justify-center gap-1">
-                          <button
-                            onClick={() => handleOpenProfile(p.id)}
-                            disabled={busy}
-                            className="p-2 text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors"
-                            title="Mở trình duyệt với Profile này"
-                          >
-                            <Globe className="w-4.5 h-4.5" />
-                          </button>
+                          {(() => {
+                            const isRunning = runningProfileIds.has(String(p.id))
+                            const isOpening = openingProfileIds.has(p.id)
+                            return (
+                              <button
+                                onClick={() => handleOpenProfile(p.id)}
+                                disabled={busy || isOpening}
+                                className={`p-2 rounded-lg transition-all relative ${
+                                  isRunning
+                                    ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 ring-1 ring-emerald-500/40'
+                                    : 'text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
+                                }`}
+                                title={
+                                  isOpening
+                                    ? 'Đang khởi chạy trình duyệt...'
+                                    : isRunning
+                                    ? 'Trình duyệt đang mở - Bấm để chuyển đến cửa sổ'
+                                    : 'Mở trình duyệt với Profile này'
+                                }
+                              >
+                                {isOpening ? (
+                                  <Loader2 className="w-4.5 h-4.5 animate-spin text-emerald-600 dark:text-emerald-400" />
+                                ) : (
+                                  <Globe className="w-4.5 h-4.5" />
+                                )}
+                                {isRunning && !isOpening && (
+                                  <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900 animate-pulse" />
+                                )}
+                              </button>
+                            )
+                          })()}
                           <button
                             onClick={() => openUpdateModal(p.id, p.name, p.metadata)}
                             disabled={busy}
@@ -441,7 +521,7 @@ export default function ProfileManagerPage() {
                     {/* Expanded Pages Row */}
                     {isExpanded && (pageCount > 0 || hasMetadata) && (
                       <tr>
-                        <td colSpan="4" className="bg-slate-50/70 dark:bg-slate-800/30 px-6 py-4">
+                        <td colSpan="5" className="bg-slate-50/70 dark:bg-slate-800/30 px-6 py-4">
                           <div className="ml-4 space-y-4">
                             {hasMetadata && (
                               <div>

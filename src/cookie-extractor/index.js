@@ -39,4 +39,53 @@ async function extractFacebookCookie(existingCookies = null) {
   }
 }
 
-module.exports = { extractFacebookCookie };
+function parseCookieString(cookieString) {
+  if (!cookieString) return [];
+  let cookies = [];
+  try {
+    const parsed = JSON.parse(cookieString);
+    const cookieArray = Array.isArray(parsed) ? parsed : parsed.cookies || [];
+    if (cookieArray.length > 0) {
+      cookies = cookieArray.map((cookie) => ({
+        name: cookie.name,
+        value: cookie.value,
+        domain: cookie.domain || '.facebook.com',
+        path: cookie.path || '/',
+        httpOnly: cookie.httpOnly !== undefined ? cookie.httpOnly : ['xs', 'datr', 'sb', 'fr'].includes(cookie.name),
+        secure: cookie.secure !== undefined ? cookie.secure : true,
+        sameSite: cookie.sameSite || 'None',
+        expires: cookie.expires || (Math.floor(Date.now() / 1000) + 365 * 86400),
+      }));
+    }
+  } catch {
+    const cookiePairs = cookieString.split(';').map((pair) => pair.trim()).filter(Boolean);
+    cookies = cookiePairs
+      .map((pair) => {
+        const splitIndex = pair.indexOf('=');
+        if (splitIndex === -1) return null;
+        const name = pair.slice(0, splitIndex).trim();
+        const value = pair.slice(splitIndex + 1).trim();
+        return {
+          name,
+          value,
+          domain: '.facebook.com',
+          path: '/',
+          httpOnly: ['xs', 'datr', 'sb', 'fr'].includes(name),
+          secure: true,
+          sameSite: 'None',
+          expires: Math.floor(Date.now() / 1000) + 365 * 86400,
+        };
+      })
+      .filter((cookie) => cookie && cookie.name);
+  }
+  return cookies;
+}
+
+async function injectCookies(page, cookieString) {
+  const cookies = parseCookieString(cookieString);
+  if (cookies.length > 0) {
+    await page.setCookie(...cookies);
+  }
+}
+
+module.exports = { extractFacebookCookie, parseCookieString, injectCookies };

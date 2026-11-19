@@ -5,7 +5,7 @@ class SyncQueueRepository {
     this._db = db;
 
     this._stmts = {
-      getAll: db.prepare('SELECT * FROM sync_queues'),
+      getAll: db.prepare('SELECT * FROM sync_queues ORDER BY created_at ASC'),
       getById: db.prepare('SELECT * FROM sync_queues WHERE id = ?'),
       insert: db.prepare(`
         INSERT INTO sync_queues (

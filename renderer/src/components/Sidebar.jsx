@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
-import { ListOrdered, Network, Terminal, Users, UserPlus, Settings } from 'lucide-react'
+import { ListOrdered, Terminal, Users, Settings } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 const getNavItems = (t) => [

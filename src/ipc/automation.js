@@ -86,6 +86,7 @@ function register(ctx) {
     const imagePath = payload?.imagePath || '';
     const cookieString = (payload?.cookieString || '').trim();
     const pageIdentity = payload?.pageIdentity || null;
+    const profileId = payload?.profileId || null;
 
     if (!cookieString) {
       throw new Error(t('backend.errors.missing_cookies'));
@@ -98,6 +99,17 @@ function register(ctx) {
     if (imagePath && !fs.existsSync(imagePath)) {
       throw new Error(t('backend.errors.selected_image_not_found'));
     }
+    
+    let metadata = {};
+    let profileName = 'Trello Sync';
+    if (profileId) {
+      const db = require('../db/Database');
+      const profile = await db.getProfileById(profileId);
+      if (profile) {
+        profileName = profile.name;
+        if (profile.metadata) metadata = profile.metadata;
+      }
+    }
 
     pushStatus('Launching browser and preparing post...', 'running');
 
@@ -108,6 +120,8 @@ function register(ctx) {
         imagePath,
         cookieString,
         pageIdentity,
+        metadata,
+        profileName,
         groupUrl: facebook.groupUrl,
         sessionDir: getSessionDir('fb-session'),
         onStatus: pushStatus,

@@ -1,7 +1,6 @@
-const { launchStealthBrowser } = require('./BrowserLauncher');
 const path = require('path');
 const fs = require('fs');
-const { app } = require('electron');
+const { launchStealthBrowser } = require('./BrowserLauncher');
 
 async function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -9,184 +8,166 @@ async function delay(ms) {
 
 let wrapLinkPromiseChain = Promise.resolve();
 
-async function _wrapLinkInternal(originalLink, domain = 'sofuvale.one') {
-  // Use the provided domain, but if it's empty/null, use 'sofuvale.one' as default
-  const targetDomain = domain || 'sofuvale.one';
-  // Use a persistent session dir for Tinfosmedia so login is saved
-  const userDataDir = path.join(app.getPath('userData'), 'tinfos_session');
-  
-  const browser = await launchStealthBrowser({
-    headless: true,
-    defaultViewport: null,
-    userDataDir,
-  });
+function getUserDataPath() {
+  try {
+    const { app } = require('electron');
+    if (app && typeof app.getPath === 'function') {
+      return app.getPath('userData');
+    }
+  } catch (e) {}
+  return path.join(process.env.APPDATA || '', 'Trello PostPilot');
+}
 
-  const pages = await browser.pages();
-  const page = pages[0] || await browser.newPage();
-  
-  // Load saved cookies to restore session
-  const cookiePath = path.join(app.getPath('userData'), 'tinfos_cookies.json');
+/**
+ * Lấy cookie Tinfos đã lưu từ file tinfos_cookies.json
+ */
+function getSavedTinfosCookies() {
+  const cookiePath = path.join(getUserDataPath(), 'tinfos_cookies.json');
   if (fs.existsSync(cookiePath)) {
     try {
       const cookies = JSON.parse(fs.readFileSync(cookiePath, 'utf8'));
-      if (cookies && cookies.length > 0) {
-        await page.setCookie(...cookies);
+      if (Array.isArray(cookies) && cookies.length > 0) {
+        return cookies;
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error('[Tinfos] Không thể đọc file cookie:', e.message);
+    }
   }
-  
-  await page.bringToFront();
+  return [];
+}
+
+/**
+ * Rút gọn / Wrap link qua API chính thức của Dash Tinfosmedia
+ * Tốc độ cực nhanh (~0.3s), không cần khởi động browser puppeteer
+ */
+async function _wrapLinkViaApi(originalLink, cleanDomain) {
+  const cookies = getSavedTinfosCookies();
+  if (!cookies || cookies.length === 0) {
+    throw new Error('Chưa đăng nhập Tinfosmedia. Vui lòng vào Cài đặt -> Đăng Nhập Tinfos.');
+  }
+
+  const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ');
+
+  console.log(`[Tinfos API] Gửi yêu cầu tạo link: dest=${originalLink}, domain=${cleanDomain}`);
+  const response = await fetch('https://dash.tinfosmedia.com/api/link-wrapper/create-link', {
+    method: 'POST',
+    headers: {
+      'Cookie': cookieHeader,
+      'Content-Type': 'application/json',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
+    },
+    body: JSON.stringify({
+      dest: originalLink,
+      domain: cleanDomain
+    }),
+    signal: AbortSignal.timeout(10000)
+  });
+
+  if (response.status === 401) {
+    throw new Error('Chưa đăng nhập Tinfosmedia hoặc phiên đăng nhập đã hết hạn (401). Vui lòng vào Cài đặt -> Đăng Nhập Tinfos.');
+  }
+
+  if (response.status === 200) {
+    const json = await response.json();
+    if (json.success && json.slug) {
+      const wrappedUrl = `https://${cleanDomain}/posts/${json.slug}`;
+      console.log(`[Tinfos API] Tạo link thành công: ${wrappedUrl}`);
+      return wrappedUrl;
+    } else {
+      console.warn(`[Tinfos API] Phản hồi không thành công (${json.message || 'unknown'}). Sử dụng link gốc.`);
+      // Trả về link gốc nếu Tinfos từ chối link (ví dụ Only .cafe destinations are allowed)
+      return originalLink;
+    }
+  }
+
+  throw new Error(`Tinfos API trả về mã lỗi HTTP ${response.status}`);
+}
+
+/**
+ * Phương thức dự phòng sử dụng Browser nếu API gặp sự cố mạng bất thường
+ */
+async function _wrapLinkViaBrowser(originalLink, cleanDomain) {
+  const userDataDir = path.join(getUserDataPath(), 'tinfos_session');
+  let browser = null;
 
   try {
-    console.log('[Tinfos] Navigating to dash.tinfosmedia.com/link-wrapper...');
-    await page.goto('https://dash.tinfosmedia.com/link-wrapper', { waitUntil: 'networkidle2', timeout: 60000 });
-
-    // Wait for the user to log in if they aren't
-    // We check if the destination input is present. If not, wait.
-    let inputFound = false;
-    for (let i = 0; i < 60; i++) {
-      const inputs = await page.$$('input');
-      // Look for the input. Typically it might have placeholder "Destination" or similar.
-      // Since we don't know the exact selector, we'll wait for the user to navigate to the wrapper page manually if they were redirected to login.
-      if (page.url().includes('/link-wrapper')) {
-        // Find input that is likely the destination URL
-        const destInput = await page.evaluate(() => {
-          const inputs = Array.from(document.querySelectorAll('input'));
-          for (const inp of inputs) {
-            const ph = (inp.placeholder || '').toLowerCase();
-            const id = (inp.id || '').toLowerCase();
-            if (ph.includes('destination') || ph.includes('url') || ph.includes('link') || id.includes('destination')) {
-              return true;
-            }
-          }
-          return false;
-        });
-        
-        if (destInput) {
-          inputFound = true;
-          break;
-        }
-      }
-      await delay(1000);
-    }
-
-    if (!inputFound) {
-      throw new Error("Timeout waiting for Tinfosmedia wrapper page to load. Please make sure you are logged in.");
-    }
-
-    // Since we don't have the exact DOM structure, we'll try to find the input by placeholder or name
-    const inputHandle = await page.evaluateHandle(() => {
-      const inputs = Array.from(document.querySelectorAll('input'));
-      // Prefer placeholder 'Destination'
-      let target = inputs.find(i => (i.placeholder || '').toLowerCase().includes('destination'));
-      if (!target) target = inputs.find(i => (i.placeholder || '').toLowerCase().includes('url'));
-      if (!target) target = inputs[0]; // fallback to first input
-      return target;
+    browser = await launchStealthBrowser({
+      headless: true,
+      defaultViewport: null,
+      userDataDir,
     });
 
-    if (!inputHandle || !inputHandle.asElement()) {
-      throw new Error("Could not find Destination input field.");
+    const pages = await browser.pages();
+    const page = pages[0] || await browser.newPage();
+
+    const cookies = getSavedTinfosCookies();
+    if (cookies.length > 0) {
+      await page.setCookie(...cookies);
     }
 
-    // Clear and type instantly (React-compatible)
-    await inputHandle.evaluate((el, link) => {
-      // Bypass React's value tracker
-      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-      if (nativeInputValueSetter) {
-        nativeInputValueSetter.call(el, link);
-      } else {
-        el.value = link;
-      }
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-      el.dispatchEvent(new Event('change', { bubbles: true }));
-    }, originalLink);
+    await page.bringToFront();
+    console.log('[Tinfos Browser] Điều hướng đến dash.tinfosmedia.com/link-wrapper...');
+    await page.goto('https://dash.tinfosmedia.com/link-wrapper', { waitUntil: 'domcontentloaded', timeout: 30000 });
 
-    // Fill Domain field if provided
-    // Fill Domain field
-    if (targetDomain) {
-      await page.evaluate((domainValue) => {
-        const inputs = Array.from(document.querySelectorAll('input'));
-        const domainInput = inputs.find(i => {
-          const ph = (i.placeholder || '').toLowerCase();
-          const id = (i.id || '').toLowerCase();
-          const name = (i.name || '').toLowerCase();
-          return ph.includes('domain') || id.includes('domain') || name.includes('domain') || ph === 'example.com';
-        });
-        if (!domainInput) return;
-        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-        if (setter) setter.call(domainInput, domainValue);
-        else domainInput.value = domainValue;
-        domainInput.dispatchEvent(new Event('input', { bubbles: true }));
-        domainInput.dispatchEvent(new Event('change', { bubbles: true }));
-      }, targetDomain);
-    }
+    // Kiểm tra nhanh input destination
+    const destSelector = '#dest, input[name="dest"], input[placeholder*="destination" i]';
+    await page.waitForSelector(destSelector, { timeout: 10000 });
 
-    // Find Wrap button (usually a button, input, or div)
-    const buttonHandle = await page.evaluateHandle(() => {
-      const elements = Array.from(document.querySelectorAll('button, input, div[role="button"], a, div'));
-      for (const el of elements) {
-         const text = (el.innerText || el.value || '').trim().toLowerCase();
-         if (text === 'wrap' || text === 'shorten') {
-             // Return closest clickable element
-             return el.closest('button') || el.closest('a') || el.closest('[role="button"]') || el;
-         }
+    // Điền destination URL và domain qua DOM React-safe
+    await page.evaluate((link, domain) => {
+      const setVal = (el, val) => {
+        if (!el) return;
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+        if (setter) setter.call(el, val);
+        else el.value = val;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+
+      const destInput = document.querySelector('#dest') || document.querySelector('input[placeholder*="destination" i]');
+      setVal(destInput, link);
+
+      const domainInput = document.querySelector('#domain') || document.querySelector('input[placeholder*="domain" i], input[placeholder="example.com"]');
+      if (domainInput && domain) {
+        setVal(domainInput, domain);
       }
-      return null;
+    }, originalLink, cleanDomain);
+
+    await delay(500);
+
+    // Bắt đầu lắng nghe response của create-link API để lấy kết quả ngay tức khắc
+    const responsePromise = page.waitForResponse(
+      res => res.url().includes('/api/link-wrapper/create-link'),
+      { timeout: 12000 }
+    ).catch(() => null);
+
+    // Click nút Wrap an toàn qua DOM click
+    const clicked = await page.evaluate(() => {
+      const btns = Array.from(document.querySelectorAll('button, div[role="button"]'));
+      const wrapBtn = btns.find(b => (b.innerText || '').trim().toLowerCase() === 'wrap');
+      if (wrapBtn) {
+        wrapBtn.click();
+        return true;
+      }
+      return false;
     });
 
-    // Capture existing links before clicking Wrap
-    const beforeLinks = await page.evaluate(() => document.body.innerText.match(/(https?:\/\/[^\s"'()<>]+)/g) || []);
-
-    if (buttonHandle && buttonHandle.asElement()) {
-      await buttonHandle.click();
-    } else {
-      // Fallback: press enter on the input field
-      await inputHandle.press('Enter');
+    if (!clicked) {
+      console.warn('[Tinfos Browser] Không tìm thấy nút Wrap, dùng link gốc.');
+      return originalLink;
     }
 
-    // Wait for the result link to appear. 
-    console.log('[Tinfos] Waiting for wrapped link...');
-    let wrappedLink = originalLink;
-    
-    // We'll look for the first link that:
-    // 1. Is not the original link
-    // 2. Is not a dash.tinfosmedia.com link
-    // 3. (Optional) matches the domain if provided
-    
-    for (let i = 0; i < 40; i++) {
-      await delay(1000);
-      const links = await page.evaluate(() => {
-        // Try to find links inside the main container first
-        // If not found, fall back to all links in body
-        const allLinks = Array.from(document.querySelectorAll('a')).map(a => a.href)
-          .concat(document.body.innerText.match(/(https?:\/\/[^\s"'()<>]+)/g) || []);
-        return Array.from(new Set(allLinks)); // Unique links
-      });
-      
-      const validLinks = links.filter(l => 
-        l !== originalLink && 
-        !l.includes('dash.tinfosmedia.com') && 
-        !l.includes('tinfosmedia.com') &&
-        (targetDomain ? l.includes(targetDomain) : true)
-      );
-
-      // If we found any valid links, and either it's different from before or we've waited enough
-      if (validLinks.length > 0) {
-        // The most recently wrapped link is usually the first one in the list (Top of dashboard)
-        // We take the first one found in the DOM/Text
-        wrappedLink = validLinks[0];
-        
-        // If this link is different from the top link we saw BEFORE clicking Wrap, 
-        // we can be more confident it's the new one.
-        const topBefore = beforeLinks.filter(l => l !== originalLink && !l.includes('dash.tinfosmedia.com'))[0];
-        
-        if (wrappedLink !== topBefore || i > 5) {
-           break;
+    const res = await responsePromise;
+    if (res) {
+      try {
+        const json = await res.json();
+        if (json.success && json.slug) {
+          return `https://${cleanDomain}/posts/${json.slug}`;
         }
-      }
+      } catch (e) {}
     }
 
-    return wrappedLink;
+    return originalLink;
   } finally {
     if (browser) {
       await browser.close().catch(() => {});
@@ -194,15 +175,95 @@ async function _wrapLinkInternal(originalLink, domain = 'sofuvale.one') {
   }
 }
 
-async function wrapLink(originalLink, domain = 'sofuvale.one') {
+function extractCleanDomain(domain) {
+  if (!domain) return '';
+  return String(domain)
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .split('/')[0]
+    .split('?')[0]
+    .split('#')[0]
+    .trim();
+}
+
+function getSavedTinfosConfig() {
+  const configPath = path.join(getUserDataPath(), 'tinfos-config.json');
+  if (fs.existsSync(configPath)) {
+    try {
+      const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      if (cfg && typeof cfg === 'object') return cfg;
+    } catch (e) {}
+  }
+  return {};
+}
+
+function isAlreadyTargetDomain(link, cleanDomain) {
+  if (!link || !cleanDomain) return false;
+  try {
+    const u = new URL(link);
+    const host = u.hostname.toLowerCase().replace(/^www\./, '');
+    const target = cleanDomain.toLowerCase().replace(/^www\./, '');
+    return host === target;
+  } catch {
+    return link.toLowerCase().includes(cleanDomain.toLowerCase());
+  }
+}
+
+/**
+ * Xử lý wrap link nội bộ
+ */
+async function _wrapLinkInternal(originalLink, domain = '') {
+  if (!originalLink) return '';
+
+  const cfg = getSavedTinfosConfig();
+  const rawDomain = (domain && String(domain).trim()) || cfg.domain || '';
+  const cleanDomain = extractCleanDomain(rawDomain);
+
+  if (!cleanDomain) {
+    console.warn('[Tinfos] Chưa cấu hình đầu web (Domain). Giữ nguyên link gốc:', originalLink);
+    return originalLink;
+  }
+
+  // 1. Kiểm tra nếu link đã thuộc domain mục tiêu (đã bọc đúng đầu web cấu hình) -> Giữ nguyên ngay lập tức
+  if (isAlreadyTargetDomain(originalLink, cleanDomain)) {
+    console.log(`[Tinfos] Link đã thuộc định dạng đầu web mục tiêu ("${cleanDomain}"): ${originalLink}`);
+    return originalLink;
+  }
+
+  // 2. Thử tạo link qua Direct REST API (nhanh nhất, ~0.3s)
+  try {
+    return await _wrapLinkViaApi(originalLink, cleanDomain);
+  } catch (apiErr) {
+    if (apiErr.message && apiErr.message.includes('Chưa đăng nhập')) {
+      throw apiErr;
+    }
+    console.warn('[Tinfos] Không thể wrap qua API trực tiếp, thử fallback qua Browser:', apiErr.message);
+  }
+
+  // 3. Fallback qua Browser có giới hạn thời gian nghiêm ngặt
+  try {
+    return await _wrapLinkViaBrowser(originalLink, cleanDomain);
+  } catch (browserErr) {
+    console.error('[Tinfos] Cả hai phương thức wrap link đều thất bại:', browserErr.message);
+    return originalLink;
+  }
+}
+
+/**
+ * Hàm wrapLink công khai (dùng promise chain tuần tự)
+ */
+async function wrapLink(originalLink, domain = '') {
   const execute = () => _wrapLinkInternal(originalLink, domain);
   const promise = wrapLinkPromiseChain.then(execute, execute);
   wrapLinkPromiseChain = promise.catch(() => {});
   return promise;
 }
 
+/**
+ * Đăng nhập Tinfosmedia
+ */
 async function loginTinfos() {
-  const userDataDir = path.join(app.getPath('userData'), 'tinfos_session');
+  const userDataDir = path.join(getUserDataPath(), 'tinfos_session');
   const browser = await launchStealthBrowser({
     headless: false,
     defaultViewport: null,
@@ -211,9 +272,9 @@ async function loginTinfos() {
 
   const pages = await browser.pages();
   const page = pages[0] || await browser.newPage();
-  
-  const cookiePath = path.join(app.getPath('userData'), 'tinfos_cookies.json');
-  // Load existing
+
+  const cookiePath = path.join(getUserDataPath(), 'tinfos_cookies.json');
+  // Load existing cookies
   if (fs.existsSync(cookiePath)) {
     try {
       const cookies = JSON.parse(fs.readFileSync(cookiePath, 'utf8'));
@@ -224,23 +285,29 @@ async function loginTinfos() {
   }
 
   await page.bringToFront();
-  await page.goto('https://dash.tinfosmedia.com/login', { waitUntil: 'networkidle2' });
-  
-  // Periodically save cookies every 10 seconds while the window is open
-  const interval = setInterval(async () => {
-    try {
-      if (browser.isConnected()) {
-        const cookies = await page.cookies();
-        fs.writeFileSync(cookiePath, JSON.stringify(cookies, null, 2));
-      } else {
-        clearInterval(interval);
-      }
-    } catch (e) {
-      clearInterval(interval);
-    }
-  }, 10000);
+  await page.goto('https://dash.tinfosmedia.com/sign-in', { waitUntil: 'domcontentloaded' });
 
-  // Save cookies one last time when closing
+  const saveCookies = async () => {
+    try {
+      if (browser.isConnected() && !page.isClosed()) {
+        const cookies = await page.cookies();
+        if (cookies && cookies.length > 0) {
+          fs.writeFileSync(cookiePath, JSON.stringify(cookies, null, 2));
+        }
+      }
+    } catch (e) {}
+  };
+
+  // Lưu cookies mỗi khi chuyển trang (ví dụ đăng nhập thành công vào trang dashboard)
+  page.on('framenavigated', async (frame) => {
+    if (frame === page.mainFrame()) {
+      await saveCookies();
+    }
+  });
+
+  // Lưu cookies định kỳ mỗi 3 giây khi cửa sổ đang mở
+  const interval = setInterval(saveCookies, 3000);
+
   browser.on('disconnected', async () => {
     clearInterval(interval);
   });

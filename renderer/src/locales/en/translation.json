@@ -107,6 +107,8 @@
     "buttons": {
       "add_profile": "Add New Profile"
     },
+    "search_placeholder": "Search by name...",
+    "no_search_results": "No matching profiles found.",
     "empty_state": "No Profiles saved yet.",
     "tooltips": {
       "rescan": "Rescan pages from Facebook",

@@ -6,7 +6,7 @@ class ProfileRepository {
 
     // Prepared statements
     this._stmts = {
-      getAll: db.prepare('SELECT * FROM profiles'),
+      getAll: db.prepare('SELECT * FROM profiles ORDER BY created_at ASC'),
       getById: db.prepare('SELECT * FROM profiles WHERE id = ?'),
       insert: db.prepare(
         'INSERT INTO profiles (id, name, cookie_string, pages, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?)',

@@ -62,18 +62,31 @@ ipcMain.on('set-language', (event, lang) => {
   setLanguage(lang);
 });
 
-app.whenReady().then(() => {
-  createWindow();
-
-  // Initialize auto-updater after window is ready
-  autoUpdater.init(getMainWindow());
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    const mainWindow = getMainWindow();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
     }
   });
-});
+
+  app.whenReady().then(() => {
+    createWindow();
+
+    // Initialize auto-updater after window is ready
+    autoUpdater.init(getMainWindow());
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow();
+      }
+    });
+  });
+}
 
 app.on('before-quit', async () => {
   // Đóng automation đơn lẻ (PostGroup)

@@ -27,7 +27,9 @@ export default function SettingsPage() {
   }, []);
 
   const handleSaveDomain = async () => {
-    await window.desktopApp.saveTinfosConfig({ domain: tinfosDomain });
+    const cleaned = tinfosDomain.trim().replace(/^https?:\/\//i, '').split('/')[0].split('?')[0].split('#')[0].trim();
+    setTinfosDomain(cleaned);
+    await window.desktopApp.saveTinfosConfig({ domain: cleaned });
     setDomainSaved(true);
     setTimeout(() => setDomainSaved(false), 2000);
   };
@@ -144,11 +146,11 @@ export default function SettingsPage() {
           <div className="flex items-end gap-3">
             <div className="flex-1">
               <label className="flex items-center gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                <Link className="w-4 h-4" /> Domain mặc định khi Wrap link
+                <Link className="w-4 h-4" /> Cấu hình đầu web (Domain mặc định khi bọc link)
               </label>
               <input
                 type="text"
-                placeholder="sofuvale.one"
+                placeholder="mosaicnotes.online"
                 value={tinfosDomain}
                 onChange={e => setTinfosDomain(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-green-500 outline-none"

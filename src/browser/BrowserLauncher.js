@@ -54,8 +54,7 @@ function getChromiumPath() {
 
 // Args giả lập trình duyệt thật, tránh bị detect là headless/bot
 const STEALTH_ARGS = [
-  '--no-sandbox',
-  '--disable-setuid-sandbox',
+  '--test-type',
   '--disable-blink-features=AutomationControlled',
   '--disable-infobars',
   '--disable-dev-shm-usage',
@@ -66,7 +65,7 @@ const STEALTH_ARGS = [
   '--disable-autofill',
   '--disable-notifications',
   '--disable-popup-blocking',
-  '--disable-features=TranslateUI,BlinkGenPropertyTrees', // Remove Translation and other UI bars
+  '--disable-features=TranslateUI,BlinkGenPropertyTrees,CalculateNativeWinOcclusion,IntensiveWakeUpThrottling,BackForwardCache',
   '--disable-component-update',
   '--disable-background-networking',
   '--disable-sync',
@@ -74,20 +73,40 @@ const STEALTH_ARGS = [
   '--mute-audio',
   '--disable-background-timer-throttling',
   '--disable-backgrounding-occluded-windows',
+  '--disable-renderer-backgrounding',
+  '--disable-ipc-flooding-protection',
   '--disable-client-side-phishing-detection',
   '--disable-hang-monitor',
   '--disable-prompt-on-repost',
   '--metrics-recording-only',
-  '--test-type',
 
   // Giả lập GPU và WebGL thật
   '--enable-webgl',
-  '--use-gl=swiftshader',
 
   // Realistic window size and state
   '--window-position=0,0',
   '--force-device-scale-factor=1.1',
 ];
+
+/**
+ * Lấy thư mục dữ liệu trình duyệt riêng biệt cho từng profile để lưu phiên đăng nhập lâu dài.
+ * Tránh việc mỗi lần mở là một trình duyệt mới toanh khiến Facebook nghi ngờ và ép đăng xuất.
+ */
+function getProfileUserDataDir(profileId) {
+  if (!profileId) return undefined;
+  try {
+    const { app } = require('electron');
+    const baseDir = path.join(app.getPath('userData'), 'browser_profiles');
+    const dir = path.join(baseDir, `profile_${profileId}`);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    return dir;
+  } catch (err) {
+    console.error('Không thể tạo userDataDir cho profile:', err);
+    return undefined;
+  }
+}
 
 /**
  * Launch trình duyệt với stealth plugin + anti-fingerprint config.
@@ -139,43 +158,68 @@ async function launchStealthBrowser({
     console.error('Không thể ép phóng to qua CDP:', e);
   }
 
-  // Xoá thuộc tính navigator.webdriver trên mọi page mới
-  browser.on('targetcreated', async (target) => {
-    const page = await target.page().catch(() => null);
-    if (!page) return;
-
-    await page.evaluateOnNewDocument(() => {
-      // Override navigator.webdriver
-      Object.defineProperty(navigator, 'webdriver', {
-        get: () => undefined,
-      });
-
-      // Override permissions query
-      const originalQuery = window.navigator.permissions.query;
-      window.navigator.permissions.query = (parameters) => {
-        if (parameters.name === 'notifications') {
-          return Promise.resolve({ state: Notification.permission });
-        }
-        return originalQuery(parameters);
-      };
-
-      // Override plugins to look real
-      Object.defineProperty(navigator, 'plugins', {
-        get: () => [
-          { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer' },
-          { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai' },
-          { name: 'Native Client', filename: 'internal-nacl-plugin' },
-        ],
-      });
-
-      // Override languages
-      Object.defineProperty(navigator, 'languages', {
-        get: () => ['vi-VN', 'vi', 'en-US', 'en'],
-      });
-    }).catch(() => {});
-  });
-
   return browser;
 }
 
-module.exports = { launchStealthBrowser };
+async function setWindowTitle(page, prefix) {
+  if (!page || !prefix) return;
+  const initTitleHelper = (p) => {
+    window.__postpilotTitlePrefix = p;
+    if (window.__postpilotTitleObserverAttached) {
+      if (typeof window.__postpilotUpdateTitle === 'function') {
+        window.__postpilotUpdateTitle();
+      }
+      return;
+    }
+    window.__postpilotTitleObserverAttached = true;
+
+    let isUpdating = false;
+    const updateTitle = () => {
+      if (isUpdating) return;
+      const activePrefix = window.__postpilotTitlePrefix;
+      if (!activePrefix) return;
+      const t = document.title || '';
+      const expectedStart = `[${activePrefix}]`;
+      if (t.startsWith(expectedStart)) return;
+
+      const cleanTitle = t.replace(/^(\[[^\]]*\]\s*)+/, '').trim();
+      if (cleanTitle) {
+        isUpdating = true;
+        document.title = `${expectedStart} ${cleanTitle}`;
+        isUpdating = false;
+      } else if (document.readyState === 'complete') {
+        isUpdating = true;
+        document.title = `${expectedStart} Facebook`;
+        isUpdating = false;
+      }
+    };
+
+    window.__postpilotUpdateTitle = updateTitle;
+
+    const attachObserver = () => {
+      updateTitle();
+      const head = document.querySelector('head');
+      if (head && !window.__postpilotHeadObserved) {
+        window.__postpilotHeadObserved = true;
+        new MutationObserver(updateTitle).observe(head, {
+          childList: true,
+          subtree: true,
+          characterData: true,
+        });
+      }
+    };
+
+    if (document.readyState === 'loading') {
+      window.addEventListener('DOMContentLoaded', attachObserver, { once: true });
+    } else {
+      attachObserver();
+    }
+
+    setInterval(updateTitle, 2000);
+  };
+
+  await page.evaluateOnNewDocument(initTitleHelper, prefix).catch(() => {});
+  await page.evaluate(initTitleHelper, prefix).catch(() => {});
+}
+
+module.exports = { launchStealthBrowser, setWindowTitle, getProfileUserDataDir };

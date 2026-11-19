@@ -5,7 +5,7 @@ class QueueRepository {
     this._db = db;
 
     this._stmts = {
-      getAll: db.prepare('SELECT * FROM queues'),
+      getAll: db.prepare('SELECT * FROM queues ORDER BY created_at ASC'),
       getById: db.prepare('SELECT * FROM queues WHERE id = ?'),
       insert: db.prepare(`
         INSERT INTO queues (

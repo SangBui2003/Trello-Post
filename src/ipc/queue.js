@@ -6,16 +6,25 @@ const { getMainWindow } = require('./helpers');
 
 // Multi-queue: map queueId -> { controller, browser, isClosing }
 const activeQueues = new Map();
+const startingQueues = new Set();
 
 function normalizeQueuePayload(payload = {}) {
   const posts = Array.isArray(payload.posts)
     ? payload.posts.map((post) => ({
+        selected: post.selected !== undefined ? Boolean(post.selected) : true,
         content: (post.content || '').trim(),
         commentText: (post.commentText || '').trim(),
         imagePath: post.imagePath || '',
         imageBase64: post.imageBase64 || '',
+        imageUrl: post.imageUrl || '',
+        thumbnailUrl: post.thumbnailUrl || '',
+        trelloCardId: post.trelloCardId || '',
+        trelloCardName: post.trelloCardName || '',
         enableSchedule: Boolean(post.enableSchedule),
+        scheduleType: post.scheduleType === 'delay' ? 'delay' : 'exact',
         scheduledTime: post.scheduledTime || '',
+        delayHours: Math.max(0, parseInt(post.delayHours, 10) || 0),
+        delayMinutes: Math.max(0, parseInt(post.delayMinutes, 10) || 0),
       })).filter((post) => post.content)
     : [];
 
@@ -23,10 +32,13 @@ function normalizeQueuePayload(payload = {}) {
     name: (payload.name || '').trim(),
     profileId: (payload.profileId || '').trim(),
     pageIdentity: payload.pageIdentity || 'personal',
+    trelloBoardId: payload.trelloBoardId || '',
+    trelloListId: payload.trelloListId || '',
+    trelloListName: payload.trelloListName || '',
     posts,
     delayMinutes: Number(payload.delayMinutes) || 5,
-    approvalMode: Boolean(payload.approvalMode),
     enableTimer: payload.enableTimer !== undefined ? Boolean(payload.enableTimer) : true,
+    approvalMode: Boolean(payload.approvalMode),
   };
 }
 
@@ -38,36 +50,40 @@ function validateQueuePayload(queue) {
   if (!queue.profileId) {
     throw new Error(t('backend.errors.no_profile'));
   }
-
-  if (!Array.isArray(queue.posts) || queue.posts.length === 0) {
-    throw new Error(t('backend.errors.min_post'));
-  }
 }
 
 /**
- * Kiểm tra page có đang được dùng bởi hàng đợi đang chạy không.
- * Cho phép tạo nhiều hàng đợi cùng page, nhưng chỉ 1 được chạy tại 1 thời điểm.
+ * Kiểm tra page hoặc profile có đang được dùng bởi hàng đợi đang chạy không.
+ * Cho phép tạo nhiều hàng đợi cùng page/profile, nhưng chỉ 1 được chạy tại 1 thời điểm.
  */
-async function assertPageNotRunning(db, queueId, pageIdentity) {
-  if (!pageIdentity || pageIdentity === 'personal') return;
+async function assertPageNotRunning(db, queueId, pageIdentity, profileId) {
+  const runningIds = new Set([...activeQueues.keys(), ...startingQueues]);
 
-  for (const [runningId] of activeQueues) {
+  for (const runningId of runningIds) {
     if (runningId === queueId) continue;
 
     const runningQueue = await db.getQueueById(runningId);
-    if (runningQueue && runningQueue.pageIdentity === pageIdentity) {
+    if (!runningQueue) continue;
+
+    if (pageIdentity && pageIdentity !== 'personal' && runningQueue.pageIdentity === pageIdentity) {
       throw new Error(t('backend.errors.page_in_use', {name: runningQueue.name}));
+    }
+
+    if (profileId && runningQueue.profileId === profileId) {
+      throw new Error(`Profile của hàng đợi này đang được sử dụng bởi hàng đợi "${runningQueue.name}". Vui lòng dùng Profile riêng cho từng hàng đợi chạy song song hoặc đợi hàng đợi kia hoàn tất.`);
     }
   }
 
   // Cross-check with sync-queue
-  const { getActiveSyncQueues } = require('./sync-queue');
-  const activeSyncQs = getActiveSyncQueues();
-  for (const [runningId] of activeSyncQs) {
-    if (runningId === queueId) continue;
-    const runningSyncQueue = await db.getSyncQueueById(runningId);
-    if (runningSyncQueue && runningSyncQueue.pageIdentity === pageIdentity) {
-      throw new Error(t('backend.errors.page_in_use_sync', {name: runningSyncQueue.name}));
+  if (pageIdentity && pageIdentity !== 'personal') {
+    const { getActiveSyncQueues } = require('./sync-queue');
+    const activeSyncQs = getActiveSyncQueues();
+    for (const [runningId] of activeSyncQs) {
+      if (runningId === queueId) continue;
+      const runningSyncQueue = await db.getSyncQueueById(runningId);
+      if (runningSyncQueue && runningSyncQueue.pageIdentity === pageIdentity) {
+        throw new Error(t('backend.errors.page_in_use_sync', {name: runningSyncQueue.name}));
+      }
     }
   }
 }
@@ -114,39 +130,60 @@ function register(ctx) {
   });
 
   ipcMain.handle('queue:start', async (_, queueId) => {
-    if (activeQueues.has(queueId)) {
+    if (activeQueues.has(queueId) || startingQueues.has(queueId)) {
       throw new Error(t('backend.errors.process_running'));
     }
 
-    const queue = await db.getQueueById(queueId);
-    if (!queue) {
-      throw new Error(t('backend.errors.queue_not_exist_2'));
-    }
+    startingQueues.add(queueId);
 
-    validateQueuePayload(queue);
-
-    // Chỉ cho phép 1 hàng đợi cùng page chạy tại 1 thời điểm
-    await assertPageNotRunning(db, queueId, queue.pageIdentity);
-
-    const profile = await db.getProfileById(queue.profileId);
-    if (!profile) {
-      const allProfiles = await db.getProfiles();
-      console.error(`[QueueStart] Profile ${queue.profileId} not found. Available IDs:`, allProfiles.map(p => p.id));
-      throw new Error(t('backend.errors.profile_not_exist'));
-    }
-
-    if (!profile.cookieString) {
-      throw new Error(t('backend.errors.invalid_cookies'));
-    }
-
-    // Validate ảnh trong mỗi bài viết
-    for (const post of queue.posts) {
-      const hasValidPath = post.imagePath && fs.existsSync(post.imagePath);
-      const hasBase64 = !!post.imageBase64;
-      
-      if (post.imagePath && !hasValidPath && !hasBase64) {
-        throw new Error(t('backend.errors.image_not_found', {path: post.imagePath}));
+    let queue;
+    let profile;
+    try {
+      queue = await db.getQueueById(queueId);
+      if (!queue) {
+        throw new Error(t('backend.errors.queue_not_exist_2'));
       }
+
+      validateQueuePayload(queue);
+
+      // Chỉ cho phép 1 hàng đợi cùng page hoặc cùng profile chạy tại 1 thời điểm
+      await assertPageNotRunning(db, queueId, queue.pageIdentity, queue.profileId);
+
+      profile = await db.getProfileById(queue.profileId);
+      if (!profile) {
+        const allProfiles = await db.getProfiles();
+        console.error(`[QueueStart] Profile ${queue.profileId} not found. Available IDs:`, allProfiles.map(p => p.id));
+        throw new Error(t('backend.errors.profile_not_exist'));
+      }
+
+      if (!profile.cookieString) {
+        throw new Error(t('backend.errors.invalid_cookies'));
+      }
+
+      if (!queue.posts || queue.posts.length === 0) {
+        throw new Error('Hàng đợi chưa có thẻ/bài viết nào để đăng! Vui lòng thêm bài viết trước khi bắt đầu.');
+      }
+
+      const selectedPosts = queue.posts.filter((post) => post.selected !== false);
+      if (selectedPosts.length === 0) {
+        throw new Error('Hàng đợi không có bài viết nào được chọn để đăng! Vui lòng tích chọn bài viết trước khi bắt đầu.');
+      }
+
+      // Validate ảnh trong mỗi bài viết ĐƯỢC CHỌN (cho phép bài viết Trello tải ảnh JIT khi chạy)
+      for (const post of selectedPosts) {
+        const hasValidPath = post.imagePath && fs.existsSync(post.imagePath);
+        const hasBase64 = !!post.imageBase64;
+        const hasTrello = !!(post.trelloCardId || post.imageUrl);
+        
+        if (!hasValidPath && !hasBase64 && !hasTrello) {
+          if (post.imagePath) {
+            throw new Error(t('backend.errors.image_not_found', {path: post.imagePath}));
+          }
+        }
+      }
+    } catch (err) {
+      startingQueues.delete(queueId);
+      throw err;
     }
 
     pushStatus(`Starting queue "${queue.name}"...`, 'running');
@@ -158,6 +195,12 @@ function register(ctx) {
       sessionDir: getSessionDir('fb-queue-session'),
       db,
       onStatus: pushStatus,
+      onComplete: () => {
+        if (activeQueues.get(queueId)?.controller === controller) {
+          activeQueues.delete(queueId);
+          pushQueueStatus();
+        }
+      },
       onQueueUpdate: (id, updatedQueue) => {
         const mainWindow = getMainWindow();
         if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -185,6 +228,7 @@ function register(ctx) {
 
     const entry = { controller, browser: null, isClosing: false };
     activeQueues.set(queueId, entry);
+    startingQueues.delete(queueId);
     pushQueueStatus();
 
     // Chạy bất đồng bộ — không block IPC
@@ -220,7 +264,7 @@ function register(ctx) {
     await entry.controller.stop();
     activeQueues.delete(queueId);
 
-    pushStatus('Queue stopped.', 'info');
+    pushStatus(`Đã dừng tự động đăng bài cho hàng đợi: ${entry.controller?.queue?.name || queueId}. Trình duyệt vẫn được giữ mở.`, 'info');
     pushQueueStatus();
 
     return { ok: true, stopped: true };
@@ -235,7 +279,7 @@ function register(ctx) {
       activeQueues.delete(id);
     }
 
-    pushStatus('All queues stopped.', 'info');
+    pushStatus('Đã dừng tất cả hàng đợi. Trình duyệt vẫn được giữ mở.', 'info');
     pushQueueStatus();
 
     return { ok: true, stopped: ids.length };

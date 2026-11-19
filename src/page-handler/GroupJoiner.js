@@ -1,15 +1,28 @@
 const { t } = require('../utils/i18n');
-const { launchStealthBrowser } = require('../browser/BrowserLauncher');
 
 /**
  * Tự động tham gia một nhóm Facebook.
  * Trả về trạng thái: "JOINED", "PENDING", "JOIN_CLICKED", "UNKNOWN", "FAILED"
  */
-async function joinGroup(page, groupUrl, onStatus = () => {}) {
+async function joinGroup(page, groupUrl, onStatus = () => {}, metadata = {}) {
   try {
     onStatus(t('backend.status.accessing_group_url', {url: groupUrl}), 'info');
     await page.goto(groupUrl, { waitUntil: 'networkidle2', timeout: 60000 });
     await new Promise((r) => setTimeout(r, 4000)); // Đợi render & tránh check point
+
+    const { checkFacebookLoginState, autoLoginFacebook } = require('../login-handler/FacebookLogin');
+    const loginCheck = await checkFacebookLoginState(page, metadata?.uid);
+    
+    if (!loginCheck.isLoggedIn) {
+      const loginSuccess = await autoLoginFacebook(page, metadata, onStatus);
+      if (!loginSuccess) {
+        throw new Error('Tài khoản bị văng đăng xuất và không thể tự động đăng nhập.');
+      }
+      // Re-navigate to the group
+      onStatus(t('backend.status.accessing_group_url', {url: groupUrl}), 'info');
+      await page.goto(groupUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+      await new Promise((r) => setTimeout(r, 4000));
+    }
 
     // Tìm nút Join hoặc Trạng thái hiện tại
     const status = await page.evaluate(async () => {

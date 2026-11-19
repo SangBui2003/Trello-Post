@@ -20,7 +20,7 @@ function parsePastedCookies(rawText) {
     if (parsed.cookies && Array.isArray(parsed.cookies)) {
       return JSON.stringify(parsed)
     }
-  } catch (e) {
+  } catch {
     // Not JSON, continue to other formats
   }
 

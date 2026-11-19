@@ -1,5 +1,6 @@
 const { t } = require('../utils/i18n');
 const { launchStealthBrowser } = require('../browser/BrowserLauncher');
+const { injectCookies } = require('../cookie-extractor');
 
 class PageScanner {
   /**
@@ -154,35 +155,7 @@ class PageScanner {
   }
 
   async _injectCookies(page, cookieString) {
-    let cookies = [];
-    try {
-      const parsed = JSON.parse(cookieString);
-      const cookieArray = Array.isArray(parsed) ? parsed : (parsed.cookies || []);
-      if (cookieArray.length > 0) {
-        cookies = cookieArray.map((c) => ({
-          name: c.name,
-          value: c.value,
-          domain: c.domain || '.facebook.com',
-          path: c.path || '/',
-        }));
-      }
-    } catch {
-      const cookiePairs = cookieString.split(';').map((p) => p.trim()).filter(Boolean);
-      cookies = cookiePairs.map((pair) => {
-        const splitIdx = pair.indexOf('=');
-        if (splitIdx === -1) return null;
-        return {
-          name: pair.slice(0, splitIdx).trim(),
-          value: pair.slice(splitIdx + 1).trim(),
-          domain: '.facebook.com',
-          path: '/',
-        };
-      }).filter((c) => c && c.name);
-    }
-
-    if (cookies.length > 0) {
-      await page.setCookie(...cookies);
-    }
+    await injectCookies(page, cookieString);
   }
 }
 

@@ -1,7 +1,8 @@
 const { t } = require('../utils/i18n');
 const path = require('path');
 const { facebook: defaultConfig } = require('../config');
-const { launchStealthBrowser } = require('../browser/BrowserLauncher');
+const { launchStealthBrowser, setWindowTitle } = require('../browser/BrowserLauncher');
+const { injectCookies } = require('../cookie-extractor');
 const { PageSwitcher } = require('../page-handler');
 const { waitForPageSettled } = require('./utils/dom');
 const { openComposer } = require('./actions/ComposerLocator');
@@ -17,7 +18,7 @@ class PostGroupController {
     this.targetPage = null;
   }
 
-  async initBrowser(sessionDir) {
+  async initBrowser(sessionDir, title) {
     this.browser = await launchStealthBrowser({
       headless: false,
       defaultViewport: null,
@@ -26,46 +27,26 @@ class PostGroupController {
     const pages = await this.browser.pages();
     this.targetPage = pages[0] || (await this.browser.newPage());
 
+    if (title) {
+      await setWindowTitle(this.targetPage, title);
+      this.browser.on('targetcreated', async (target) => {
+        if (target.type() === 'page') {
+          const newPage = await target.page();
+          if (newPage) await setWindowTitle(newPage, title);
+        }
+      });
+    }
+
     await this.targetPage.bringToFront();
     await this.targetPage.setDefaultNavigationTimeout(this.config.navigationTimeoutMs);
     await this.targetPage.setDefaultTimeout(this.config.actionTimeoutMs);
   }
 
   async injectCookies(page, cookieString) {
-    let cookies = [];
-    try {
-      const parsed = JSON.parse(cookieString);
-      let cookieArray = Array.isArray(parsed) ? parsed : (parsed.cookies || []);
-      if (cookieArray.length > 0) {
-        cookies = cookieArray.map(c => ({
-          name: c.name,
-          value: c.value,
-          domain: c.domain || '.facebook.com',
-          path: c.path || '/',
-        }));
-      }
-    } catch (e) {
-      const cookiePairs = cookieString.split(';').map(pair => pair.trim()).filter(Boolean);
-      cookies = cookiePairs.map(pair => {
-        const splitIdx = pair.indexOf('=');
-        if (splitIdx === -1) return null;
-        const name = pair.slice(0, splitIdx);
-        const value = pair.slice(splitIdx + 1);
-        return {
-          name: name.trim(),
-          value: value.trim(),
-          domain: '.facebook.com',
-          path: '/',
-        };
-      }).filter(c => c && c.name);
-    }
-    
-    if (cookies.length > 0) {
-      await page.setCookie(...cookies);
-    }
+    await injectCookies(page, cookieString);
   }
 
-  async navigateToGroup(groupUrl, onStatus) {
+  async navigateToGroup(groupUrl, onStatus, metadata) {
     onStatus(t('backend.status.opening_group_page'));
     await this.targetPage.goto(groupUrl, {
       waitUntil: 'domcontentloaded',
@@ -75,8 +56,22 @@ class PostGroupController {
     await waitForPageSettled(this.targetPage);
     await this.dismissLoginModal(this.targetPage, onStatus);
 
-    if (this.targetPage.url().includes('/login')) {
-      throw new Error(t('backend.errors.facebook_login_2'));
+    const { checkFacebookLoginState, autoLoginFacebook } = require('../login-handler/FacebookLogin');
+    const loginCheck = await checkFacebookLoginState(this.targetPage, metadata?.uid);
+
+    if (!loginCheck.isLoggedIn) {
+      const loginSuccess = await autoLoginFacebook(this.targetPage, metadata, (msg, type) => onStatus(msg, type));
+      if (!loginSuccess) {
+        throw new Error(t('backend.errors.facebook_login_2'));
+      }
+      
+      onStatus(t('backend.status.opening_group_page') + ' (Sau đăng nhập)');
+      await this.targetPage.goto(groupUrl, {
+        waitUntil: 'domcontentloaded',
+        timeout: this.config.navigationTimeoutMs,
+      });
+      await waitForPageSettled(this.targetPage);
+      await this.dismissLoginModal(this.targetPage, onStatus);
     }
   }
 
@@ -112,13 +107,33 @@ class PostGroupController {
 
 
 
-  async prepareDraft({ content, imagePath, cookieString, groupUrl, sessionDir, pageIdentity, onStatus = () => {} }) {
+  async prepareDraft({ content, imagePath, cookieString, groupUrl, sessionDir, pageIdentity, metadata, profileName, onStatus = () => {} }) {
     try {
-      await this.initBrowser(sessionDir);
+      await this.initBrowser(sessionDir, profileName);
 
       if (cookieString) {
         onStatus(t('backend.status.setting_cookies_profile'));
         await this.injectCookies(this.targetPage, cookieString);
+      }
+      
+      // Kiểm tra đăng nhập sớm
+      await this.targetPage.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await new Promise(r => setTimeout(r, 4000)); // Đợi React render
+
+      const { checkFacebookLoginState, autoLoginFacebook } = require('../login-handler/FacebookLogin');
+      const loginCheck = await checkFacebookLoginState(this.targetPage, metadata?.uid);
+      
+      if (!loginCheck.isLoggedIn) {
+          const loginSuccess = await autoLoginFacebook(this.targetPage, metadata, (msg, type) => onStatus(msg, type || 'info'));
+          if (!loginSuccess) {
+             throw new Error(t('backend.errors.facebook_login_2'));
+          }
+          
+          // Re-navigate to facebook.com to ensure state is clean before PageSwitcher
+          await this.targetPage.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+          await new Promise(r => setTimeout(r, 3000));
+      } else {
+          onStatus('Tài khoản đã đăng nhập sẵn. Giữ nguyên phiên làm việc.', 'info');
       }
 
       // 1. Switch identity if Fanpage is specified (Perform BEFORE entering Group)
@@ -126,7 +141,10 @@ class PostGroupController {
         await PageSwitcher.switchIdentity(this.targetPage, pageIdentity, onStatus);
       }
 
-      await this.navigateToGroup(groupUrl, onStatus);
+      await this.navigateToGroup(groupUrl, onStatus, metadata);
+
+      onStatus('Đang chờ trang tải ổn định...');
+      await delay(4000); // Wait for React to render
 
       onStatus(t('backend.status.waiting_composer_area'));
       const composer = await openComposer(this.targetPage, this.config.actionTimeoutMs, onStatus);

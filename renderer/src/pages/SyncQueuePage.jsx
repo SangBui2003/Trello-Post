@@ -16,6 +16,7 @@ import {
   RotateCcw,
   Users,
   Save,
+  Loader2,
 } from 'lucide-react'
 
 const EMPTY_FORM = {
@@ -51,6 +52,8 @@ export default function SyncQueuePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [runningIds, setRunningIds] = useState([])
+  const [openingProfileIds, setOpeningProfileIds] = useState(new Set())
+  const [runningProfileIds, setRunningProfileIds] = useState(new Set())
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingQueue, setEditingQueue] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -112,12 +115,62 @@ export default function SyncQueuePage() {
     })
   }, [hasDesktopBridge])
 
+  // Real-time running profiles updates
+  useEffect(() => {
+    if (window.desktopApp?.getRunningProfileIds) {
+      window.desktopApp.getRunningProfileIds().then((ids) => {
+        setRunningProfileIds(new Set((ids || []).map(String)))
+      }).catch(() => {})
+    }
+    if (window.desktopApp?.onProfileRunningUpdate) {
+      const unsub = window.desktopApp.onProfileRunningUpdate((ids) => {
+        setRunningProfileIds(new Set((ids || []).map(String)))
+      })
+      return () => unsub()
+    }
+  }, [])
+
   // --- Derived state ---
 
   const selectedProfile = useMemo(
     () => profiles.find((profile) => profile.id === form.profileId) || null,
     [form.profileId, profiles],
   )
+
+  const btvOrderedProfiles = useMemo(() => {
+    let order = []
+    try {
+      order = JSON.parse(localStorage.getItem('profileOrder') || '[]')
+    } catch {
+      order = []
+    }
+
+    const sorted = [...profiles].sort((a, b) => {
+      const idxA = order.indexOf(a.id)
+      const idxB = order.indexOf(b.id)
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB
+      if (idxA !== -1) return -1
+      if (idxB !== -1) return 1
+      return 0
+    })
+
+    const btvList = sorted.filter(p => (p.metadata?.category || '').trim().toLowerCase() === 'btv')
+
+    // Nếu không có profile nào được đánh dấu BTV, fallback sang danh sách đã sắp xếp
+    if (btvList.length === 0) {
+      return sorted
+    }
+
+    // Nếu profile hiện tại trong form không phải BTV, vẫn giữ lại để không mất dữ liệu của hàng đợi
+    if (form.profileId && !btvList.some(p => p.id === form.profileId)) {
+      const currentSelected = profiles.find(p => p.id === form.profileId)
+      if (currentSelected) {
+        return [currentSelected, ...btvList]
+      }
+    }
+
+    return btvList
+  }, [profiles, form.profileId])
 
   const availablePages = selectedProfile?.pages || []
   const readyProfiles = profiles.length > 0
@@ -242,6 +295,32 @@ export default function SyncQueuePage() {
     }
   }
 
+  const handleOpenProfile = async (profileId) => {
+    if (!profileId) {
+      setErrorStatus('Hàng đợi này chưa được gắn Profile!')
+      return
+    }
+    const profile = profiles.find((p) => p.id === profileId)
+    if (!profile) {
+      setErrorStatus('Profile liên kết với hàng đợi này không tồn tại!')
+      return
+    }
+    if (!hasDesktopBridge || !window.desktopApp?.openProfile) return
+
+    setOpeningProfileIds((prev) => new Set(prev).add(profileId))
+    try {
+      await window.desktopApp.openProfile(profileId)
+    } catch (err) {
+      setErrorStatus('Lỗi mở Profile: ' + (err.message || err))
+    } finally {
+      setOpeningProfileIds((prev) => {
+        const next = new Set(prev)
+        next.delete(profileId)
+        return next
+      })
+    }
+  }
+
   const handleStartQueue = async (queue) => {
     if (!hasDesktopBridge) return
     setErrorStatus('')
@@ -342,14 +421,24 @@ export default function SyncQueuePage() {
               const state = queue.state || { currentGroupIndex: 0, status: 'idle' }
               const lastLog = queue.logs && queue.logs.length > 0 ? queue.logs[queue.logs.length - 1] : null
               const isPendingApproval = isRunning && state.status === 'pending_approval'
+              const targetProfile = profiles.find((p) => p.id === queue.profileId)
+              const isProfileRunning = runningProfileIds.has(String(queue.profileId))
+              const isOpeningProfile = openingProfileIds.has(queue.profileId)
 
               return (
                 <article
                   key={queue.id}
-                  className={`rounded-2xl border transition-all duration-300 flex flex-col group/card h-full ${
+                  onClick={() => handleOpenProfile(queue.profileId)}
+                  className={`rounded-2xl border transition-all duration-300 flex flex-col group/card h-full cursor-pointer select-none hover:-translate-y-1 hover:shadow-lg ${
                     isRunning ? 'border-indigo-300 ring-4 ring-indigo-50 dark:ring-indigo-900/20 bg-white dark:bg-slate-800' : 'border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/50'
                   }`}
-                >                  <div className="p-5 flex-1 pb-3">
+                  title={
+                    isProfileRunning
+                      ? "Profile đang mở - Bấm vào thẻ để chuyển đến cửa sổ trình duyệt"
+                      : "Bấm vào thẻ để mở Profile"
+                  }
+                >
+                  <div className="p-5 flex-1 pb-3">
                     {/* Card header */}
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
@@ -373,14 +462,29 @@ export default function SyncQueuePage() {
                              <ShieldCheck className="w-4 h-4 text-indigo-400 dark:text-indigo-500" title={t('post_queue.tooltips.manual_approval')} />
                           )}
                         </div>
-                        <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 mt-1 uppercase tracking-tight">
-                          {t('sync_queue.labels.posting_identity')} <span className="text-slate-700 dark:text-slate-300">{resolveIdentityLabel(queue)}</span>
+                        <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 mt-1 uppercase tracking-tight flex items-center gap-1.5 flex-wrap">
+                          <span>{t('sync_queue.labels.posting_identity')}</span>
+                          <span className="text-slate-700 dark:text-slate-300 font-semibold">{resolveIdentityLabel(queue)}</span>
+                          {targetProfile && (
+                            <span className="text-slate-400 dark:text-slate-500 shrink-0 flex items-center gap-1 text-[11px]">
+                              • Profile: <span className="text-slate-700 dark:text-slate-300 font-bold">{targetProfile.name}</span>
+                              {isProfileRunning && (
+                                <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900 animate-pulse ml-0.5" title="Trình duyệt Profile đang mở" />
+                              )}
+                              {isOpeningProfile && (
+                                <Loader2 className="w-3 h-3 animate-spin text-emerald-600 dark:text-emerald-400 ml-0.5" />
+                              )}
+                            </span>
+                          )}
                         </p>
                       </div>
 
                       <div className="flex items-center gap-1 shrink-0">
                         <button
-                          onClick={() => handleResetQueue(queue)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleResetQueue(queue)
+                          }}
                           disabled={saving || isRunning}
                           className="p-2 text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/40 rounded-lg transition-colors disabled:opacity-30"
                           title={t('post_queue.tooltips.reset_process')}
@@ -388,14 +492,20 @@ export default function SyncQueuePage() {
                           <RotateCcw className="w-5 h-5" />
                         </button>
                         <button
-                          onClick={() => setShowLogsId(queue.id)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setShowLogsId(queue.id)
+                          }}
                           className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/40 rounded-lg transition-colors"
                           title={t('post_queue.tooltips.event_history')}
                         >
                           <History className="w-5 h-5" />
                         </button>
                         <button
-                          onClick={() => openEditModal(queue)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            openEditModal(queue)
+                          }}
                           disabled={saving || isRunning}
                           className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/40 rounded-lg transition-colors disabled:opacity-30"
                           title={t('post_queue.tooltips.edit')}
@@ -403,7 +513,10 @@ export default function SyncQueuePage() {
                           <Pencil className="w-5 h-5" />
                         </button>
                         <button
-                          onClick={() => handleDelete(queue)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDelete(queue)
+                          }}
                           disabled={saving}
                           className="p-2 text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/40 rounded-lg transition-colors"
                           title={t('post_queue.tooltips.delete')}
@@ -472,7 +585,10 @@ export default function SyncQueuePage() {
                     
                     {!isRunning ? (
                       <button
-                        onClick={() => handleStartQueue(queue)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleStartQueue(queue)
+                        }}
                         disabled={saving}
                         className="flex-1 btn-primary py-2.5 rounded-xl flex items-center justify-center gap-2 group shadow-sm bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-700 dark:hover:bg-indigo-600 transition-all uppercase text-xs font-black tracking-widest"
                       >
@@ -481,7 +597,10 @@ export default function SyncQueuePage() {
                       </button>
                     ) : (
                       <button
-                        onClick={() => handleStopQueue(queue)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleStopQueue(queue)
+                        }}
                         disabled={saving}
                         className={`${isPendingApproval ? 'w-12 px-0' : 'flex-1 py-2.5'} btn-secondary flex items-center justify-center gap-2 rounded-xl bg-slate-800 text-white border-slate-800 hover:bg-slate-900 dark:bg-slate-950 dark:hover:bg-slate-900 dark:border-slate-800 shadow-sm transition-all uppercase text-xs font-black tracking-widest`}
                         title="Stop Sync"
@@ -612,7 +731,7 @@ export default function SyncQueuePage() {
                           className="input-field font-bold"
                         >
                           <option value="">{t('post_queue.modal.options.select_profile')}</option>
-                          {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                          {btvOrderedProfiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                         </select>
                       </div>
                       <div>

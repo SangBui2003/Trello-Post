@@ -9,6 +9,50 @@ const TRELLO_SELECTIONS_PATH = path.join(app.getPath('userData'), 'trello-select
 const CTA_CONFIG_PATH = path.join(app.getPath('userData'), 'cta-config.json');
 
 const DEFAULT_CTAS = ["𝑾𝑨𝑻𝑪𝑯 👉", "𝑭𝒖𝒍𝒍 𝒔𝒕𝒐𝒓𝒚 👉", "𝑹𝒆𝒂𝒅 𝒎𝒐𝒓𝒆 👉", "𝑼𝒑𝒅𝒂𝒕𝒆 𝑵𝒆𝒘 𝑻𝒐𝒅𝒂𝒚👉"];
+const thumbnailCache = new Map();
+
+async function downloadCardImageDirect(cardId, fileName, imageUrl) {
+  const manager = getManager();
+  const tempDir = path.join(app.getPath('userData'), 'temp_images');
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+  }
+
+  let safeFileName = fileName ? fileName.replace(/[^a-z0-9.]/gi, '_').toLowerCase() : 'trello_img.jpg';
+  const rawExt = path.extname(safeFileName).toLowerCase();
+  const validExt = ['.jpg', '.jpeg', '.png', '.webp', '.gif'].includes(rawExt) ? rawExt : '.jpg';
+  const basePart = (rawExt === validExt ? safeFileName.slice(0, -rawExt.length) : safeFileName).replace(/\./g, '_').slice(0, 30) || 'trello_img';
+  safeFileName = `${basePart}${validExt}`;
+  const filePath = path.join(tempDir, `${cardId || 'img'}_${safeFileName}`);
+
+  // Trả về ngay nếu file đã được tải trước đó và hợp lệ
+  if (fs.existsSync(filePath)) {
+    try {
+      const stats = fs.statSync(filePath);
+      if (stats.size > 0) {
+        return { filePath };
+      }
+    } catch {}
+  }
+
+  let targetUrl = imageUrl;
+  if (!targetUrl && cardId) {
+    const attachments = await manager.getCardAttachments(cardId);
+    if (attachments && attachments.length > 0) {
+      const imgAttachment = attachments.find(a => a.mimeType && a.mimeType.startsWith('image/')) || attachments[0];
+      if (imgAttachment) {
+        targetUrl = imgAttachment.url;
+      }
+    }
+  }
+
+  if (!targetUrl) {
+    throw new Error('Không tìm thấy link ảnh đính kèm trên thẻ Trello');
+  }
+
+  const finalPath = await manager.downloadImage(targetUrl, filePath);
+  return { filePath: finalPath };
+}
 
 function getCTAConfig() {
   if (fs.existsSync(CTA_CONFIG_PATH)) {
@@ -45,7 +89,9 @@ function getTinfosConfig() {
 }
 
 function saveTinfosConfig(config) {
-  fs.writeFileSync(TINFOS_CONFIG_PATH, JSON.stringify(config, null, 2));
+  const rawDomain = config?.domain ? String(config.domain).trim() : '';
+  const cleanDomain = rawDomain.replace(/^https?:\/\//i, '').split('/')[0].split('?')[0].split('#')[0].trim();
+  fs.writeFileSync(TINFOS_CONFIG_PATH, JSON.stringify({ ...config, domain: cleanDomain }, null, 2));
 }
 
 function getConfig() {
@@ -108,11 +154,10 @@ function register(ctx) {
     }
     
     let safeFileName = fileName ? fileName.replace(/[^a-z0-9.]/gi, '_').toLowerCase() : 'trello_img.jpg';
-    // Truncate to avoid MAX_PATH and filename length limits strictly
-    if (safeFileName.length > 40) {
-      const ext = path.extname(safeFileName) || '.jpg';
-      safeFileName = safeFileName.substring(0, 30) + ext;
-    }
+    const rawExt = path.extname(safeFileName).toLowerCase();
+    const validExt = ['.jpg', '.jpeg', '.png', '.webp', '.gif'].includes(rawExt) ? rawExt : '.jpg';
+    const basePart = (rawExt === validExt ? safeFileName.slice(0, -rawExt.length) : safeFileName).replace(/\./g, '_').slice(0, 30) || 'trello_img';
+    safeFileName = `${basePart}${validExt}`;
     const filePath = path.join(tempDir, `${cardId}_${safeFileName}`);
     
     const finalPath = await manager.downloadImage(imgAttachment.url, filePath);
@@ -125,6 +170,35 @@ function register(ctx) {
     } catch (e) {
       console.error('Error reading image for base64:', e);
       return { filePath: finalPath, base64: null };
+    }
+  });
+
+  ipcMain.handle('trello:get_thumbnail_base64', async (event, previewUrl) => {
+    if (!previewUrl) return null;
+    if (thumbnailCache.has(previewUrl)) {
+      return thumbnailCache.get(previewUrl);
+    }
+    try {
+      const manager = getManager();
+      const response = await fetch(previewUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `OAuth oauth_consumer_key="${manager.apiKey}", oauth_token="${manager.apiToken}"`
+        }
+      });
+      if (!response.ok) return null;
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const base64 = `data:image/jpeg;base64,${buffer.toString('base64')}`;
+      if (thumbnailCache.size > 500) {
+        const firstKey = thumbnailCache.keys().next().value;
+        thumbnailCache.delete(firstKey);
+      }
+      thumbnailCache.set(previewUrl, base64);
+      return base64;
+    } catch (e) {
+      console.error('Error fetching thumbnail:', e);
+      return null;
     }
   });
 
@@ -155,6 +229,70 @@ function register(ctx) {
     saveTrelloSelections(selections);
     return true;
   });
+
+  ipcMain.handle('trello:sync_cards', async (event, { listId, autoWrapLink = true }) => {
+    if (!listId) throw new Error('Chưa chọn danh sách Trello (List ID trống)');
+    const manager = getManager();
+    const cards = await manager.getCards(listId);
+    if (!cards || cards.length === 0) return [];
+
+    const cfg = getTinfosConfig();
+    const ctaList = getCTAConfig();
+
+    const results = [];
+    for (const card of cards) {
+      try {
+        const desc = card.desc || '';
+        const urlMatch = desc.match(/(https?:\/\/[^\s\n]+)/);
+
+        let wrappedLink = '';
+        let baseContent = card.name;
+
+        if (urlMatch) {
+          const originalLink = urlMatch[0];
+          const cleanedDesc = desc.replace(originalLink, '').trim();
+          baseContent = cleanedDesc ? `${card.name}\n\n${cleanedDesc}` : card.name;
+          wrappedLink = originalLink;
+
+          if (autoWrapLink) {
+            try {
+              wrappedLink = await wrapLink(originalLink, cfg.domain || '');
+            } catch (err) {
+              console.warn(`Lỗi wrap link thẻ "${card.name}":`, err.message);
+              wrappedLink = originalLink;
+            }
+          }
+        } else {
+          baseContent = desc ? `${card.name}\n\n${desc}` : card.name;
+        }
+
+        const cta = ctaList.length > 0 ? ctaList[Math.floor(Math.random() * ctaList.length)] : '';
+        const imgAttachment = (card.attachments || []).find(a => a.mimeType && a.mimeType.startsWith('image/')) || card.attachments?.[0];
+        const preview = imgAttachment?.previews?.find(p => p.width >= 300 && p.width <= 600) || imgAttachment?.previews?.[0];
+
+        results.push({
+          selected: false,
+          content: baseContent,
+          commentText: wrappedLink ? `${cta} ${wrappedLink}`.trim() : '',
+          imagePath: '',
+          imageBase64: '',
+          imageUrl: imgAttachment ? imgAttachment.url : '',
+          thumbnailUrl: preview ? preview.url : (imgAttachment ? imgAttachment.url : ''),
+          trelloCardId: card.id,
+          trelloCardName: card.name,
+          enableSchedule: false,
+          scheduleType: 'exact',
+          scheduledTime: '',
+          delayHours: 0,
+          delayMinutes: 30,
+        });
+      } catch (err) {
+        console.error(`Lỗi xử lý thẻ "${card.name}":`, err);
+      }
+    }
+
+    return results;
+  });
 }
 
-module.exports = { register, getCTAConfig };
+module.exports = { register, getCTAConfig, downloadCardImageDirect };
