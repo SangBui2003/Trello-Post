@@ -187,6 +187,36 @@ function register(ctx) {
     return Array.from(runningBrowsers.keys());
   });
 
+  // Close only this profile's managed Chromium browser; keep its account and queue data.
+  ipcMain.handle('profile:close', async (_, profileId) => {
+    if (profileId === undefined || profileId === null) {
+      throw new Error('Chưa chọn Profile cần đóng.');
+    }
+    const key = String(profileId);
+    // If the browser is still launching, wait until its entry is ready to close.
+    if (!runningBrowsers.has(key) && launchingPromises.has(key)) {
+      await launchingPromises.get(key).catch(() => {});
+    }
+    const entry = runningBrowsers.get(key);
+    if (!entry || !entry.browser || !entry.browser.isConnected()) {
+      if (runningBrowsers.get(key) === entry && entry) {
+        runningBrowsers.delete(key);
+        notifyRunningProfiles();
+      }
+      return false;
+    }
+    try {
+      await entry.browser.close();
+    } finally {
+      if (runningBrowsers.get(key) === entry) {
+        runningBrowsers.delete(key);
+        notifyRunningProfiles();
+      }
+    }
+    pushStatus(`Đã đóng cửa sổ Profile: ${profileId}`, 'info');
+    return true;
+  });
+
   ipcMain.handle('profile:open', async (_, profileId) => {
     const key = String(profileId);
     const profile = await db.getProfileById(profileId);
@@ -278,6 +308,17 @@ function register(ctx) {
       runningBrowsers.set(key, entry);
       notifyRunningProfiles();
 
+      // Register disconnect immediately so closing during login also clears the running state.
+      let syncInterval = null;
+      browser.on('disconnected', () => {
+        if (syncInterval) clearInterval(syncInterval);
+        if (runningBrowsers.get(key) === entry) {
+          runningBrowsers.delete(key);
+          notifyRunningProfiles();
+        }
+        pushStatus(`Đã đóng trình duyệt của profile: ${profile.name}`, 'info');
+      });
+
       // Hook for new tabs opened by the user
       browser.on('targetcreated', async (target) => {
         if (target.type() === 'page') {
@@ -353,7 +394,10 @@ function register(ctx) {
       }
 
       // Auto-sync cookies from running browser to DB every 10 seconds (CHỈ LƯU KHI CÓ c_user VÀ xs HỢP LỆ)
-      const syncInterval = setInterval(async () => {
+      if (!browser.isConnected()) {
+        throw new Error('Trình duyệt Profile đã được đóng trong lúc khởi tạo.');
+      }
+      syncInterval = setInterval(async () => {
         try {
           const currentCookies = await targetPage.cookies();
           if (currentCookies && currentCookies.length > 0) {
@@ -367,13 +411,6 @@ function register(ctx) {
           // Ignore errors (e.g. page is closed)
         }
       }, 10000);
-
-      browser.on('disconnected', () => {
-        clearInterval(syncInterval);
-        runningBrowsers.delete(key);
-        notifyRunningProfiles();
-        pushStatus(`Đã đóng trình duyệt của profile: ${profile.name}`, 'info');
-      });
 
       return true;
     })();

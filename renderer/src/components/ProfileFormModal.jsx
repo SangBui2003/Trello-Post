@@ -38,9 +38,6 @@ export default function ProfileFormModal({
     if (!name.trim()) {
       return onError?.(t('profiles.alerts.missing_name'))
     }
-    if (isCreate && !cookie.trim()) {
-      return onError?.(t('profiles.alerts.missing_cookie'))
-    }
 
     setIsBusy(true)
     try {
@@ -64,14 +61,14 @@ export default function ProfileFormModal({
     : t('profiles.modal.update_title')
 
   const submitLabel = isCreate
-    ? t('profiles.modal.save')
+    ? 'Lưu và mở Facebook'
     : t('profiles.modal.update')
 
   const submitBusyLabel = isCreate
     ? t('profiles.modal.saving')
     : t('profiles.modal.updating')
 
-  const isSubmitDisabled = isBusy || (!cookie && isCreate) || !name.trim()
+  const isSubmitDisabled = isBusy || !name.trim()
 
   if (!isOpen) return null
 
@@ -109,20 +106,27 @@ export default function ProfileFormModal({
             />
           </div>
 
-          {!isCreate && (
-            <p className="text-sm text-slate-600 dark:text-slate-400">
-              Cập nhật lại Token nếu Cookie cũ bị hết hạn. Có thể bỏ trống nếu chỉ muốn sửa tên.
+          {isCreate ? (
+            <p className="text-sm text-slate-600 dark:text-slate-400 rounded-lg bg-blue-50 dark:bg-blue-900/20 p-3">
+              Chỉ cần đặt tên và bấm "Lưu và mở Facebook". Trình duyệt sẽ tự mở trang Facebook, không cần lấy hoặc dán Cookie trước.
+              Nếu điền UID và mật khẩu bên dưới, phần mềm sẽ thử đăng nhập tự động; nếu không, bạn có thể đăng nhập ngay trong trình duyệt.
+              Phiên đăng nhập sẽ được lưu lại cho Profile này.
             </p>
+          ) : (
+            <>
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                Cập nhật lại Token nếu Cookie cũ bị hết hạn. Có thể bỏ trống nếu chỉ muốn sửa tên.
+              </p>
+              <CookieInput
+                value={cookie}
+                onChange={setCookie}
+                onMetadataChange={(m) => setMetadata(prev => ({ ...prev, ...m }))}
+                disabled={isBusy}
+                onError={onError}
+                profileId={profileId}
+              />
+            </>
           )}
-
-          <CookieInput
-            value={cookie}
-            onChange={setCookie}
-            onMetadataChange={(m) => setMetadata(prev => ({ ...prev, ...m }))}
-            disabled={isBusy}
-            onError={onError}
-            profileId={profileId}
-          />
 
           <div className="pt-2">
             <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
@@ -138,7 +142,7 @@ export default function ProfileFormModal({
                 disabled={isBusy}
               />
               <input
-                type="text"
+                type="password"
                 placeholder="Mật khẩu"
                 value={metadata.password || ''}
                 onChange={e => setMetadata(prev => ({ ...prev, password: e.target.value }))}
@@ -162,21 +166,23 @@ export default function ProfileFormModal({
                 disabled={isBusy}
               />
               <input
-                type="text"
+                type="password"
                 placeholder="Mật khẩu Email"
                 value={metadata.emailPass || ''}
                 onChange={e => setMetadata(prev => ({ ...prev, emailPass: e.target.value }))}
                 className="input-field text-sm py-2"
                 disabled={isBusy}
               />
-              <input
-                type="text"
-                placeholder="Cookie (Chuỗi đầy đủ)"
-                value={metadata.rawString || ''}
-                onChange={e => setMetadata(prev => ({ ...prev, rawString: e.target.value }))}
-                className="input-field text-sm py-2"
-                disabled={isBusy}
-              />
+              {!isCreate && (
+                <input
+                  type="text"
+                  placeholder="Cookie (Chuỗi đầy đủ)"
+                  value={metadata.rawString || ''}
+                  onChange={e => setMetadata(prev => ({ ...prev, rawString: e.target.value }))}
+                  className="input-field text-sm py-2"
+                  disabled={isBusy}
+                />
+              )}
               <select
                 value={metadata.category || ''}
                 onChange={e => setMetadata(prev => ({ ...prev, category: e.target.value }))}

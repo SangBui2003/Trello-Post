@@ -210,6 +210,7 @@ export default function PostQueuePage() {
   const [startingIds, setStartingIds] = useState(new Set())
   const [stoppingIds, setStoppingIds] = useState(new Set())
   const [openingProfileIds, setOpeningProfileIds] = useState(new Set())
+  const [closingProfileIds, setClosingProfileIds] = useState(new Set())
   const [runningProfileIds, setRunningProfileIds] = useState(new Set())
   const [approvingIds, setApprovingIds] = useState([])
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -717,6 +718,24 @@ export default function PostQueuePage() {
     }
   }
 
+  const handleCloseProfile = async (profileId) => {
+    if (!profileId || !window.desktopApp?.closeProfile) return
+    const key = String(profileId)
+    setClosingProfileIds(prev => new Set(prev).add(key))
+    setErrorStatus('')
+    try {
+      await window.desktopApp.closeProfile(profileId)
+    } catch (err) {
+      setErrorStatus('Lỗi đóng Profile: ' + extractErrorMessage(err))
+    } finally {
+      setClosingProfileIds(prev => {
+        const next = new Set(prev)
+        next.delete(key)
+        return next
+      })
+    }
+  }
+
   const handleQuickSyncQueue = async (queue) => {
     if (!hasDesktopBridge) return
     if (runningIds.includes(queue.id)) {
@@ -1115,6 +1134,7 @@ export default function PostQueuePage() {
               const targetProfile = profiles.find((p) => p.id === queue.profileId)
               const isProfileRunning = runningProfileIds.has(String(queue.profileId))
               const isOpeningProfile = openingProfileIds.has(queue.profileId)
+              const isClosingProfile = closingProfileIds.has(String(queue.profileId))
 
               return (
                 <article
@@ -1191,6 +1211,20 @@ export default function PostQueuePage() {
                       </div>
 
                       <div className="flex items-center shrink-0">
+                        {isProfileRunning && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleCloseProfile(queue.profileId)
+                            }}
+                            disabled={isClosingProfile}
+                            className="p-1.5 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/40 rounded-lg transition-colors disabled:opacity-40"
+                            title={isClosingProfile ? 'Đang đóng Profile...' : 'Đóng trình duyệt Profile (không dừng hàng đợi đăng bài)'}
+                          >
+                            {isClosingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Square className="w-4 h-4" />}
+                          </button>
+                        )}
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
