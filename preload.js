@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('desktopApp', {
   
   getProfiles: () => ipcRenderer.invoke('profile:list'),
   openProfile: (id) => ipcRenderer.invoke('profile:open', id),
+  closeProfile: (id) => ipcRenderer.invoke('profile:close', id),
   deleteProfile: (id) => ipcRenderer.invoke('profile:delete', id),
   startProfileLogin: (profileId) => ipcRenderer.invoke('profile:start_login', profileId),
   saveProfile: (payload) => ipcRenderer.invoke('profile:save', payload),
